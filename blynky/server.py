@@ -3,6 +3,9 @@
 import asyncio
 import contextlib
 import logging
+import platform
+import shutil
+from importlib import metadata
 from pathlib import Path
 
 from aiohttp import WSMsgType, web
@@ -22,6 +25,42 @@ async def index(request):
 async def state(request):
     """Return the current UI state as JSON."""
     return web.json_response(request.app["monitor"].snapshot())
+
+
+def _version(package):
+    """Return an installed package's version, or None if it isn't installed."""
+    try:
+        return metadata.version(package)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+async def diagnostics(request):
+    """Return the facts a bug report needs, and nothing that identifies the user.
+
+    These end up in a public GitHub issue, so no camera or system names, URLs,
+    topics or account details: counts and versions only.
+    """
+    monitor = request.app["monitor"]
+    cameras = list(monitor.cameras.values())
+    return web.json_response(
+        {
+            "version": _version("blynky"),
+            "blinkpy": _version("blinkpy"),
+            "python": platform.python_version(),
+            "platform": f"{platform.system()} {platform.machine()}",
+            "docker": Path("/.dockerenv").exists(),
+            "ffmpeg": shutil.which("ffmpeg") is not None,
+            "model": config.OLLAMA_MODEL,
+            "status": monitor.status,
+            "cameras": len(cameras),
+            "offline": sum(1 for c in cameras if c.get("online") is False),
+            "systems": len({c.get("sync") for c in cameras}),
+            "poll_seconds": config.POLL_SECONDS,
+            "ntfy": bool(config.NTFY_URL),
+            "identify": config.IDENTIFY,
+        }
+    )
 
 
 async def login(request):
@@ -303,6 +342,7 @@ def create_app(monitor):
     app.on_response_prepare.append(revalidate_ui)
     app.router.add_get("/", index)
     app.router.add_get("/api/state", state)
+    app.router.add_get("/api/diagnostics", diagnostics)
     app.router.add_post("/api/login", login)
     app.router.add_post("/api/2fa", submit_2fa)
     app.router.add_post("/api/snap", snap)

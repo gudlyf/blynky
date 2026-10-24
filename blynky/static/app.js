@@ -2451,7 +2451,10 @@ function setupSettings() {
   };
   if (typeof menu.showPopover === "function") {
     menu.addEventListener("beforetoggle", (e) => {
-      if (e.newState === "open") place();
+      if (e.newState === "open") {
+        place();
+        refreshBugLink();
+      }
     });
   } else {
     // No popover support: a plain toggle, closed by clicking elsewhere.
@@ -2459,6 +2462,7 @@ function setupSettings() {
     button.addEventListener("click", (e) => {
       e.stopPropagation();
       place();
+      if (menu.hidden) refreshBugLink();
       menu.hidden = !menu.hidden;
     });
     document.addEventListener("click", (e) => {
@@ -2531,6 +2535,7 @@ function setupSettings() {
   setupNtfy();
   el("open-people").addEventListener("click", openPeople);
   el("open-help").addEventListener("click", openHelp);
+  el("report-bug").addEventListener("click", hideMenu);
 }
 
 // ------------------------------------------------------- push notifications
@@ -2626,6 +2631,51 @@ function hideMenu() {
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   else document.documentElement.requestFullscreen().catch(() => {});
+}
+
+// ------------------------------------------------------------- bug reports
+
+const ISSUE_URL = "https://github.com/gudlyf/blynky/issues/new";
+
+// Point "Report a bug" at GitHub's issue form with the version and setup
+// already filled in. Built ahead of the click rather than on it, because a
+// window opened after an await is one a popup blocker is free to stop. The
+// server only hands over versions and counts - nothing that names a camera,
+// a place or an account - since the issue is public.
+async function refreshBugLink() {
+  let info = {};
+  try {
+    info = await getJSON("/api/diagnostics");
+  } catch {
+    // Still worth a link: the user can fill in what we couldn't.
+  }
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    navigator.standalone === true;
+  const yesNo = (v) => (v === undefined ? "unknown" : v ? "yes" : "no");
+  const lines = [
+    `Blynky: ${info.version ?? "unknown"}`,
+    `blinkpy: ${info.blinkpy ?? "unknown"}`,
+    `Python: ${info.python ?? "unknown"} on ${info.platform ?? "unknown"}`,
+    `Docker: ${yesNo(info.docker)}`,
+    `ffmpeg: ${info.ffmpeg === undefined ? "unknown" : info.ffmpeg ? "found" : "missing"}`,
+    `Vision model: ${info.model ?? "unknown"}`,
+    `Status: ${info.status ?? state.status}`,
+    `Cameras: ${info.cameras ?? "unknown"} (${info.offline ?? "?"} offline) ` +
+      `across ${info.systems ?? "?"} sync system(s)`,
+    `Poll interval: ${info.poll_seconds ?? state.pollSeconds}s`,
+    `ntfy configured: ${yesNo(info.ntfy)}`,
+    `Known people: ${yesNo(info.identify)}`,
+    `Browser: ${navigator.userAgent}`,
+    `Installed app: ${standalone ? "yes" : "no"}`,
+    `Theme: ${prefs.theme}`,
+  ];
+  const params = new URLSearchParams({
+    template: "bug_report.yml",
+    version: info.version ?? "",
+    environment: lines.join("\n"),
+  });
+  el("report-bug").href = `${ISSUE_URL}?${params}`;
 }
 
 function openHelp() {

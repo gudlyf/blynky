@@ -74,6 +74,10 @@ only*.
   per browser.
 - **Known people…** — see [Known people](#known-people).
 - **Full screen**, and **Keyboard shortcuts**.
+- **Report a bug…** — opens a new GitHub issue with your Blynky, blinkpy and
+  Python versions, camera counts and browser already filled in. It never
+  includes camera names, addresses or account details, and nothing is sent
+  until you submit the issue on GitHub.
 
 Desktop alerts and keeping the screen awake need a secure context: they are
 offered on `http://127.0.0.1` or over HTTPS (`tailscale serve`, a reverse

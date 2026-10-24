@@ -48,6 +48,7 @@
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
     <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/></symbol>
+    <symbol id="i-bug" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9.5 7a2.5 2.5 0 0 1 5 0M12 11v9M3 13h4M17 13h4M4 7.5l3.2 2M20 7.5l-3.2 2M4 19.5l3.5-2.5M20 19.5l-3.5-2.5"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
   </svg>
 
@@ -153,6 +154,13 @@
     <button type="button" class="menu-item" id="open-help">
       <svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg>Keyboard shortcuts<kbd>?</kbd>
     </button>
+    <!-- Opens GitHub's new-issue form with versions and setup filled in; the
+         href is rebuilt from /api/diagnostics each time the menu opens. -->
+    <a class="menu-item" id="report-bug" target="_blank" rel="noopener"
+       href="https://github.com/gudlyf/blynky/issues/new?template=bug_report.yml"
+       title="Opens a new GitHub issue with your Blynky version and setup filled in. Nothing is sent until you submit it there">
+      <svg class="icon" aria-hidden="true"><use href="#i-bug"/></svg>Report a bug…
+    </a>
   </div>
 
   <main id="app" tabindex="-1">
