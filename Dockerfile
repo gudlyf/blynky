@@ -21,11 +21,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# The OAuth v2 login this depends on is on blinkpy's dev branch and has never
-# been released to PyPI, so this tracks a commit rather than a version. Pinned,
+# The pinned blinkpy commit includes fixes that are not yet in any released
+# blinkpy version, so this tracks a commit rather than a version. Pinned,
 # not floating: dev moves, and an unpinned build would change underneath you.
 ARG BLINKPY_REPO=https://github.com/fronzbot/blinkpy.git
-ARG BLINKPY_REF=4d0c274f8e20bdf268949eb2d756bf527dc0ae7e
+ARG BLINKPY_REF=2687c911a9ed124b466f1a111d0d8403bea70928
 
 # Fetching the one commit rather than cloning the history; GitHub serves a
 # bare SHA to fetch, so no branch name is needed and the pin is exact.
