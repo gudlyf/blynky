@@ -1,0 +1,1510 @@
+/* Colours are tokens so the theme can be switched in one place. Dark is the
+   default; light applies when the system asks for it, unless this browser
+   picked a theme in settings (data-theme on <html>). The light values are
+   stated twice rather than with light-dark(), which older Safari - the one on
+   a wall-mounted iPad - cannot parse at all. */
+:root {
+  color-scheme: dark;
+  --bg: #0d1014;
+  --panel: #151a1f;
+  --panel-2: #1d2329;
+  --panel-3: #262d34;
+  --line: #29313a;
+  --line-strong: #3a444e;
+  --text: #e8edf2;
+  --muted: #8d99a5;
+  --accent: #4ea1ff;
+  --accent-ink: #04121f;
+  --alert: #ff8a3d;
+  --ok: #3ecf8e;
+  --danger: #ff5d5d;
+  /* Words in a description that mean a person. Deliberately not --accent or
+     --alert: those already mean "selected" and "something just moved". */
+  --who: #ffd166;
+  --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
+  --shadow-lg: 0 10px 40px rgb(0 0 0 / .45);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --gutter: clamp(12px, 3vw, 24px);
+  /* The shape of the video player, everywhere. Cameras disagree about this -
+     the doorbell records 1:1 while the rest are 16:9 - so the player picks
+     one and letterboxes whatever does not match. Split into two numbers
+     because calc() needs them separately. */
+  --player-w: 16;
+  --player-h: 9;
+  --player: var(--player-w) / var(--player-h);
+  /* Side padding of the full-screen viewer, named so the player can work out
+     how wide it is allowed to be. */
+  --viewer-pad: clamp(12px, 4vw, 48px);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f7;
+  --panel: #ffffff;
+  --panel-2: #eef1f4;
+  --panel-3: #e3e8ed;
+  --line: #dde2e7;
+  --line-strong: #c5ccd3;
+  --text: #151b21;
+  --muted: #5a6875;
+  --accent: #1f7ae0;
+  --accent-ink: #ffffff;
+  --alert: #d9660f;
+  --ok: #148a58;
+  --danger: #d33a3a;
+  --who: #f2b705;
+  --shadow: 0 1px 2px rgb(16 24 32 / .06), 0 4px 16px rgb(16 24 32 / .06);
+  --shadow-lg: 0 12px 40px rgb(16 24 32 / .18);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --panel-2: #eef1f4;
+    --panel-3: #e3e8ed;
+    --line: #dde2e7;
+    --line-strong: #c5ccd3;
+    --text: #151b21;
+    --muted: #5a6875;
+    --accent: #1f7ae0;
+    --accent-ink: #ffffff;
+    --alert: #d9660f;
+    --ok: #148a58;
+    --danger: #d33a3a;
+    --who: #f2b705;
+    --shadow: 0 1px 2px rgb(16 24 32 / .06), 0 4px 16px rgb(16 24 32 / .06);
+    --shadow-lg: 0 12px 40px rgb(16 24 32 / .18);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* The `hidden` attribute is only a UA rule (`[hidden] { display: none }`), so
+   any author-level `display:` silently beats it. Several elements below set
+   one, so state this explicitly or `el.hidden = true` does nothing. */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+/* Nothing behind an open modal should scroll. */
+body:has(dialog[open]) { overflow: hidden; }
+
+button, input, select { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#app:focus { outline: none; }
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -40px;
+  z-index: 50;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.skip:focus { top: 12px; }
+
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  color: var(--text);
+}
+
+/* ---- buttons ---- */
+
+.btn, .toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.btn:hover, .toggle:hover { border-color: var(--line-strong); background: var(--panel-3); }
+.btn:disabled, .toggle:disabled { cursor: default; color: var(--muted); background: var(--panel-2); border-color: var(--line); }
+.btn .icon { width: 16px; height: 16px; }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: var(--panel-2); border-color: var(--line); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn.danger.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease;
+}
+.icon-btn:hover { background: var(--panel-2); color: var(--text); }
+.icon-btn:disabled { opacity: .35; cursor: default; background: transparent; }
+.icon-btn.on-dark { color: #e9eef3; }
+.icon-btn.on-dark:hover { background: rgb(255 255 255 / .12); color: #fff; }
+
+/* A checkbox drawn as a switch. The real input stays in the page, so it is
+   still the same checkbox to the code and to a screen reader. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.switch:hover { color: var(--text); }
+.switch input {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  flex: none;
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .15s ease, background-color .15s ease;
+}
+.switch input:checked { background: var(--accent); border-color: var(--accent); }
+.switch input:checked::after { transform: translateX(14px); background: #fff; }
+.switch.small { font-size: 12px; gap: 7px; }
+.switch.small input { width: 28px; height: 16px; }
+.switch.small input::after { width: 10px; height: 10px; }
+.switch.small input:checked::after { transform: translateX(12px); }
+
+/* ---- header ---- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 10px var(--gutter);
+  padding-top: max(10px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  backdrop-filter: saturate(1.4) blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand .logo { width: 22px; height: 22px; color: var(--accent); stroke-width: 2; }
+h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .1px; white-space: nowrap; }
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab .icon { width: 16px; height: 16px; }
+.tab:hover { color: var(--text); }
+.tab[aria-current="page"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+}
+.status.live .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.status.down .dot { background: var(--alert); }
+/* Easy to forget a pause set before bed, so it shows until it ends. */
+.ntfy-paused { border: 0; color: var(--alert); cursor: pointer; }
+.ntfy-paused .icon { width: 13px; height: 13px; }
+
+.last-check {
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.last-check b {
+  color: var(--text);
+  font-weight: 600;
+  /* Tabular figures stop the header jittering as the counter ticks. */
+  font-variant-numeric: tabular-nums;
+}
+.last-check em { font-style: normal; opacity: .65; font-variant-numeric: tabular-nums; }
+.last-check.stale b { color: var(--alert); }
+
+#sync-now.running .icon { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- settings menu ---- */
+
+.menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 250px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+/* Where it opens if the script has not placed it under its button. */
+.menu:not([style]) { top: 58px; right: 12px; }
+.menu-group { padding: 6px 8px 10px; }
+.menu-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.menu-row { display: flex; justify-content: space-between; flex-direction: row-reverse; width: 100%; padding: 8px; border-radius: 7px; color: var(--text); }
+.menu-row:hover { background: var(--panel-2); }
+.menu-sep { height: 1px; margin: 6px 4px; background: var(--line); }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--panel-2); }
+.menu-item .icon { width: 16px; height: 16px; color: var(--muted); }
+.menu-item kbd { margin-left: auto; }
+.menu-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 8px 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.menu-sub select {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.menu-note { margin: 0; padding: 2px 8px 6px; font-size: 12px; color: var(--muted); }
+.menu-note.paused { color: var(--alert); }
+
+.segmented {
+  display: flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.segmented label { flex: 1; position: relative; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span {
+  display: block;
+  padding: 4px 0;
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--muted);
+}
+.segmented input:checked + span { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); }
+
+/* ---- grid ---- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+  /* The timeline sits directly below and carries the bottom of the page. */
+  padding: 18px var(--gutter) 24px;
+}
+
+.grid-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+.card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.card:has(.card-open:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The whole card opens the camera, but only one real button can say so to a
+   keyboard or a screen reader: the name, stretched over the card. The
+   refresh button sits above it. */
+.card-open {
+  all: unset;
+  cursor: pointer;
+}
+.card-open::after { content: ""; position: absolute; inset: 0; }
+
+.card.alert {
+  border-color: var(--alert);
+  animation: pulse 1.4s ease-out 3;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--alert) 55%, transparent); }
+  100% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--alert) 0%, transparent); }
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--panel-2);
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.flags {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: flex;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.pill {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(10 14 18 / .66);
+  color: #eef2f5;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
+}
+.pill.warn { color: #ffb27d; }
+.pill.bad { color: #ff9a9a; }
+
+/* How old the picture is. Blink only stores a new still when something asks
+   for one, so this is often the difference between "live" and "last March". */
+.age {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  pointer-events: none;
+}
+.age.stale { color: #ffb27d; }
+
+.snap {
+  position: absolute;
+  z-index: 1;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / .18);
+  background: rgb(10 14 18 / .66);
+  color: #eef2f5;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, border-color .12s ease;
+}
+.snap .icon { width: 14px; height: 14px; }
+.card:hover .snap, .card:focus-within .snap, .snap.working { opacity: 1; }
+.snap:hover { border-color: var(--accent); }
+.snap:disabled { cursor: default; color: #a9b3bc; }
+.snap.working .icon { animation: pulse-op 1s ease-in-out infinite alternate; }
+@keyframes pulse-op { to { opacity: .3; } }
+
+/* Nothing hovers on a touch screen, so the button has to stay put. */
+@media (hover: none) {
+  .snap { opacity: 1; }
+}
+
+.thumb .placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.card-foot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 10px 12px 11px;
+}
+.card-foot .name {
+  display: block;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-foot .meta { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.card-foot .last {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-foot .last mark {
+  background: color-mix(in srgb, var(--who) 26%, transparent);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.card-foot .last .tl-who { margin-right: 4px; }
+
+.badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.badge.disarmed { color: var(--alert); }
+
+/* Placeholders while the first state is on its way. */
+.skeleton { cursor: default; box-shadow: none; }
+.skeleton:hover { transform: none; border-color: var(--line); }
+.skeleton .thumb, .skeleton .bar {
+  background: linear-gradient(90deg, var(--panel-2) 0%, var(--panel-3) 50%, var(--panel-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton .bar { display: block; height: 12px; width: 55%; border-radius: 6px; margin: 4px 0; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ---- detail ---- */
+
+.detail { padding: 14px var(--gutter) 40px; }
+
+.detail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1040px;
+  margin: 0 auto 12px;
+}
+.back { margin-left: -8px; }
+.cam-step { display: flex; align-items: center; gap: 4px; }
+.cam-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 42px; text-align: center; }
+
+.detail-body {
+  max-width: 1040px;
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.stage-head h2 { font-size: 16px; margin: 0; }
+.stage-title time { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stage-system {
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.stage-system:empty { display: none; }
+.stage-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.stage-media { position: relative; background: #000; }
+.stage img, .stage video {
+  width: 100%;
+  display: block;
+  background: #000;
+  /* Sized by the box, never by the clip: without this the 1920x1920 doorbell
+     renders a panel twice the height of a 16:9 camera's. */
+  aspect-ratio: var(--player);
+  max-height: 64vh;
+  object-fit: contain;
+}
+
+/* A clip is one click from the still, so say so on the picture itself. */
+.stage-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / .25);
+  background: rgb(10 14 18 / .55);
+  color: #fff;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: transform .15s ease, background-color .15s ease;
+}
+.stage-play .icon { width: 28px; height: 28px; margin-left: 3px; stroke: none; }
+.stage-play:hover { transform: scale(1.06); background: rgb(10 14 18 / .72); }
+
+.summary {
+  padding: 16px;
+  font-size: 15px;
+  line-height: 1.6;
+  border-top: 1px solid var(--line);
+  min-height: 62px;
+  text-wrap: pretty;
+}
+.summary.pending { color: var(--muted); font-style: italic; }
+.summary.empty { color: var(--muted); }
+.summary mark {
+  background: color-mix(in srgb, var(--who) 30%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* ---- timeline ---- */
+
+/* Below the grid it is a section of the page; inside the detail card it is a
+   section of that panel, so it drops its own frame and takes the card's. */
+.timeline { padding: 0 var(--gutter) 48px; }
+.timeline.inset { padding: 0; border-top: 1px solid var(--line); }
+
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 10px;
+}
+.timeline.inset .timeline-head { padding: 14px 16px 8px; }
+.timeline-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.timeline-note { font-size: 12px; color: var(--muted); }
+
+/* Pushed to the far end of the heading row, away from the count it would
+   otherwise read as part of. */
+.timeline-head .only { margin-left: auto; }
+
+.timeline-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.timeline.inset .timeline-list { background: none; border: 0; border-radius: 0; box-shadow: none; }
+
+.tl-row {
+  display: grid;
+  grid-template-columns: 64px 128px minmax(110px, 190px) 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+  transition: background-color .1s ease;
+}
+.tl-row:first-child { border-top: 0; }
+.timeline.inset .tl-row { padding-left: 16px; padding-right: 16px; }
+.tl-row:hover { background: var(--panel-2); }
+.tl-row:focus-visible { outline-offset: -2px; }
+/* The event the page is already showing, marked rather than made unclickable:
+   clicking it again is harmless and stops it looking broken. */
+.tl-row.current { box-shadow: inset 3px 0 0 var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+/* One camera's own list has nothing to say in a camera column. */
+#detail-timeline .tl-row { grid-template-columns: 64px 128px 1fr; }
+
+/* Time and camera sit in their own columns on a wide screen and share a line
+   on a narrow one, so they are wrapped but the wrapper steps aside here. */
+.tl-meta { display: contents; }
+
+.tl-thumb {
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--panel-2);
+  display: block;
+}
+span.tl-thumb { display: grid; place-items: center; color: var(--muted); }
+span.tl-thumb .icon { width: 14px; height: 14px; }
+
+.tl-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* How many clips a burst row stands for, and the way to see them. */
+.tl-burst {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tl-burst:hover { color: var(--text); border-color: var(--line-strong); }
+.tl-burst[aria-expanded="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.tl-burst .chevron { width: 12px; height: 12px; stroke-width: 2.4; rotate: 90deg; transition: rotate .15s ease; }
+.tl-burst[aria-expanded="true"] .chevron { rotate: -90deg; }
+
+/* The clips of an opened burst, set in under the row that stood for them. */
+.tl-row.member { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+.tl-row.member .tl-thumb { margin-left: 14px; width: 50px; }
+.timeline.inset .tl-row.member { padding-left: 16px; }
+
+.tl-time {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tl-camera {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-text {
+  font-size: 13px;
+  line-height: 1.45;
+  /* Two lines: long descriptions must not turn the list into a wall. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* The default mark is a black-on-yellow block, which is unreadable on a dark
+   panel and too loud for several words a line. A tint of the text's own
+   colour reads as a highlighter in both themes. */
+.tl-text mark, .viewer-summary mark {
+  background: color-mix(in srgb, var(--who) 30%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.tl-text.pending { color: var(--muted); font-style: italic; }
+.tl-text.empty { color: var(--muted); opacity: .7; }
+
+.timeline-empty {
+  margin: 0;
+  padding: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.timeline.inset .timeline-empty { padding: 0 16px 16px; }
+
+/* A recognised name, on a timeline row. Distinct from the person-word
+   highlight beside it: that marks what the model wrote, this is who it
+   thinks was there. */
+.tl-who {
+  font-weight: 600;
+  color: var(--ok);
+  white-space: nowrap;
+}
+.tl-who.sure { color: var(--accent); }
+
+/* ---- who is this ---- */
+
+.viewer-who {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 10px 0 2px;
+  color: #e9eef3;
+}
+
+.who-guess {
+  font-size: 13px;
+  color: #5fe0a5;
+  font-weight: 600;
+}
+/* A guess is hedged in words; a confirmation has earned a plainer look. */
+.who-guess.confirmed { color: #7cb9ff; }
+
+/* Says what just happened, because adding a reference otherwise changes
+   nothing on screen and reads as a dead button. */
+.who-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #aab5bf;
+}
+
+.who-tag {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.who-label { font-size: 12px; color: #aab5bf; }
+.who-people { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.who-pick, .who-add {
+  background: rgb(255 255 255 / .08);
+  color: #eef2f5;
+  border: 1px solid rgb(255 255 255 / .16);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.who-pick:hover, .who-add:hover { border-color: #7cb9ff; background: rgb(255 255 255 / .14); }
+.who-pick:disabled, .who-add:disabled { opacity: .5; cursor: default; }
+/* The person this capture is already believed to show. */
+.who-pick.on { border-color: #5fe0a5; color: #5fe0a5; }
+
+/* The backlog button only appears when there is a backlog, so it is allowed
+   to be a little louder than the filters beside it. */
+#describe-missing:not([hidden]) { border-color: var(--alert); color: var(--text); }
+#describe-missing:disabled { border-color: var(--line); color: var(--muted); }
+
+/* ---- toasts ---- */
+
+/* A popover, so the stack is drawn in the top layer and stays visible over
+   the full-screen viewer; the UA's centring is undone to pin it to a corner.
+   The box itself is invisible - only the popups in it are drawn. */
+.toasts {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 40;
+  pointer-events: none;
+}
+.toasts[popover]:not(:popover-open) { display: none; }
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 34px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  cursor: pointer;
+  pointer-events: auto;
+  animation: toast-in .22s ease-out;
+}
+.toast.motion { border-left: 3px solid var(--alert); }
+.toast.message { padding-left: 14px; border-left: 3px solid var(--accent); }
+.toast:hover { border-color: var(--line-strong); }
+.toast.motion:hover { border-left-color: var(--alert); }
+.toast:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.toast-thumb {
+  flex: none;
+  width: 88px;
+  aspect-ratio: 16 / 9;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--panel-2);
+}
+span.toast-thumb { display: grid; place-items: center; color: var(--muted); }
+
+.toast-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.toast-body strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast-body time {
+  font-size: 11.5px;
+  color: var(--muted);
+  opacity: .85;
+  font-variant-numeric: tabular-nums;
+}
+.toast-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.toast-text.pending { font-style: italic; }
+.toast-text mark {
+  background: color-mix(in srgb, var(--who) 30%, transparent);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.toast-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.toast-close:hover { background: var(--panel-2); color: var(--text); }
+.toast-close .icon { width: 14px; height: 14px; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+
+/* ---- login overlay ---- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  padding: 20px;
+}
+
+.login {
+  width: 100%;
+  max-width: 370px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 26px;
+  box-shadow: var(--shadow-lg);
+}
+.login-logo { width: 32px; height: 32px; color: var(--accent); stroke-width: 2; margin-bottom: 10px; }
+.login h2 { margin: 0 0 8px; font-size: 18px; }
+
+.login .hint, .sheet .hint {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.login label, .sheet label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.login input, .sheet input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 15px;
+}
+.login input:focus, .sheet input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.login button {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login button:disabled { opacity: .55; cursor: progress; }
+
+.login .error {
+  margin: 13px 0 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* ---- dialogs ---- */
+
+.sheet {
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+.sheet.wide { width: min(720px, calc(100vw - 24px)); }
+.sheet::backdrop {
+  background: rgb(5 8 12 / .55);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.sheet[open] { animation: sheet-in .18s ease-out; }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+
+.sheet-body { padding: 20px 22px 22px; }
+.sheet h2 { margin: 0 0 8px; font-size: 17px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.sheet-head h2 { margin: 0; }
+.sheet-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 18px;
+  margin: 14px 0 0;
+  font-size: 13.5px;
+}
+.keys dt { white-space: nowrap; color: var(--muted); }
+.keys dd { margin: 0; align-self: center; }
+
+.people-list { display: grid; gap: 16px; }
+.people-empty { color: var(--muted); font-size: 13px; margin: 0; }
+.person {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.person-head strong { font-size: 14px; }
+.person-head span { font-size: 12px; color: var(--muted); }
+.person-head .btn { margin-left: auto; min-height: 28px; padding: 4px 10px; font-size: 12px; }
+.refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.ref { position: relative; border-radius: 7px; overflow: hidden; background: var(--panel-2); aspect-ratio: 16 / 9; }
+.ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ref button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-grid;
+  place-items: center;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(10 14 18 / .7);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ref button .icon { width: 13px; height: 13px; }
+.ref button.armed { background: var(--danger); }
+
+/* ---- library ---- */
+
+.library { padding: 16px var(--gutter) 60px; }
+
+.library-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-bottom: 18px;
+}
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.filters select, .filters input {
+  min-height: 34px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.filters select { padding-right: 8px; cursor: pointer; }
+.filters select:focus, .filters input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.filters .search { position: relative; display: flex; }
+.filters .search .icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.filters .search input { min-width: 220px; padding-left: 32px; }
+
+.filters .date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.filters .date input { padding: 5px 8px; }
+
+/* Pushed to the far end of the bar so the filters stay grouped together. */
+.library-stats {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+
+/* Day headings break the run of tiles without leaving the grid. */
+.library-grid .day {
+  grid-column: 1 / -1;
+  position: sticky;
+  top: var(--header-h, 57px);
+  z-index: 2;
+  margin: 14px 0 0;
+  padding: 8px 0 7px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.library-grid .day:first-child { margin-top: 0; }
+
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform .15s ease, border-color .15s ease;
+}
+.tile:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+
+.tile-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--panel-2);
+}
+.tile-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile-thumb .placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tile-thumb .play {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgb(10 14 18 / .6);
+  color: #fff;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.tile-thumb .play .icon { width: 13px; height: 13px; stroke: none; margin-left: 2px; }
+
+.tile-time {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+}
+
+.tile-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px 11px;
+}
+.tile-name { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: baseline; }
+.tile-name .tl-who { font-size: 12px; font-weight: 500; }
+
+.tile-summary {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+  /* Two lines keeps every tile the same height however long the model was. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.9em;
+}
+.tile-summary.empty { font-style: italic; opacity: .7; }
+
+.library-empty, .library-end {
+  color: var(--muted);
+  font-size: 13px;
+}
+.library-empty { padding: 40px 0; text-align: center; }
+.library-more {
+  display: grid;
+  place-items: center;
+  padding: 26px 0 10px;
+  /* The lazy-load sentinel: keep it in the layout even with nothing in it. */
+  min-height: 20px;
+}
+
+/* ---- viewer ---- */
+
+/* A modal <dialog>: the page behind it is inert, focus stays inside, and it
+   sits in the top layer. It fills the window itself, so a click on its own
+   padding is a click on the backdrop. */
+.viewer {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: #f2f5f8;
+  background: rgb(4 6 9 / .9);
+  overflow: hidden;
+  padding: max(14px, env(safe-area-inset-top)) var(--viewer-pad) max(20px, env(safe-area-inset-bottom));
+}
+.viewer[open] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  animation: fade-in .15s ease-out;
+}
+.viewer::backdrop { background: transparent; }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .viewer { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+}
+@keyframes fade-in { from { opacity: 0; } }
+
+.viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.viewer-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.viewer-title strong { font-size: 15px; }
+.viewer-title time { font-size: 12.5px; opacity: .7; }
+.viewer-pos { font-size: 12px; opacity: .5; font-variant-numeric: tabular-nums; }
+
+.viewer-actions { display: flex; align-items: center; gap: 4px; }
+
+.viewer-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  /* An implicit `auto` row takes the clip's intrinsic height - 1920px for the
+     doorbell - and grows straight off the bottom of the window, which is also
+     why a percentage max-height on the media below has nothing to resolve
+     against. Pin the row to the space that is actually there. */
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  /* On a tall, narrow window - a phone held upright - the stage would
+     otherwise stretch into a black column with the clip stranded in the
+     middle of it. Cap it at the player's own shape for the width available. */
+  max-height: calc(
+    (100vw - 2 * var(--viewer-pad)) * var(--player-h) / var(--player-w)
+  );
+}
+.viewer-stage img, .viewer-stage video {
+  /* The player is the stage, whatever the clip is: filling it outright keeps
+     the box identical for every camera and, unlike sizing from an aspect
+     ratio, never falls back on the clip's own dimensions while its metadata
+     is still loading. The clip is letterboxed inside. */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #000;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 64px;
+  border: 0;
+  border-radius: 10px;
+  background: rgb(0 0 0 / .45);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color .12s ease;
+}
+.viewer-nav .icon { width: 26px; height: 26px; stroke-width: 2.2; }
+.viewer-nav.prev { left: 0; }
+.viewer-nav.next { right: 0; }
+.viewer-nav:hover { background: rgb(0 0 0 / .7); }
+.viewer-nav:disabled { opacity: .2; cursor: default; }
+
+.viewer-summary {
+  margin: 0;
+  color: #dfe6ec;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 900px;
+  align-self: center;
+  /* Two lines, reserved whether or not they are used: sizing this to the text
+     would resize the player above it every time the arrow keys land on a
+     longer description. Longer than two lines scrolls - of 405 descriptions
+     written so far, one runs past it. */
+  height: 3.2em;
+  flex: none;
+  overflow-y: auto;
+}
+.viewer-summary.empty { opacity: .55; font-style: italic; }
+
+/* ---- view changes ---- */
+
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .16s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ---- narrow screens ---- */
+
+@media (max-width: 900px) {
+  .last-check .lc-label, .last-check em { display: none; }
+}
+
+@media (max-width: 720px) {
+  /* Everything in the header fits on one line only on a desktop. The views
+     drop to a row of their own, and each control keeps its label on one
+     line rather than breaking a two-word label in half. */
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .tabs { order: 3; flex: 1 1 100%; }
+  .tab { flex: 1; justify-content: center; }
+  .header-right { gap: 10px; }
+  .follow span { display: none; }
+  .ntfy-paused span { display: none; }
+  .library-stats { margin-left: 0; white-space: normal; flex-basis: 100%; }
+  .filters { width: 100%; }
+  .filters .search { flex: 1 1 100%; }
+  .filters .search input { min-width: 0; width: 100%; }
+  .filters select { flex: 1 1 30%; min-width: 0; }
+
+  /* Three columns in a phone's width leaves no room for the description, so
+     the thumbnail holds the left edge and everything else stacks beside it. */
+  .tl-row, #detail-timeline .tl-row {
+    grid-template-columns: 72px 1fr;
+    grid-template-rows: auto auto;
+    gap: 2px 12px;
+    align-items: start;
+  }
+  .tl-thumb { grid-row: 1 / span 2; width: 72px; }
+  .tl-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; min-width: 0; }
+  .tl-when { flex-direction: row; align-items: baseline; gap: 8px; }
+  .tl-row.member .tl-thumb { margin-left: 10px; width: 62px; }
+}
+
+@media (max-width: 520px) {
+  /* "8 cameras" is the least useful thing on a phone's one header row, so
+     only the dot says it; anything going wrong still gets its words. */
+  .status.live { padding: 5px; }
+  .status.live #status-text { display: none; }
+  #sync-now span { display: none; }
+  #sync-now { padding: 6px 9px; }
+  .brand h1 { font-size: 14px; }
+  .viewer-nav { width: 36px; height: 52px; }
+  .who-tag { margin-left: 0; }
+}

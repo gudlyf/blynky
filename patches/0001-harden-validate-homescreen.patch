@@ -1,0 +1,54 @@
+diff --git a/blinkpy/blinkpy.py b/blinkpy/blinkpy.py
+index 9171f98..0094ea3 100644
+--- a/blinkpy/blinkpy.py
++++ b/blinkpy/blinkpy.py
+@@ -18,6 +18,7 @@ import logging
+ import datetime
+ import aiofiles
+ import aiofiles.ospath
++from aiohttp import ContentTypeError
+ from requests.structures import CaseInsensitiveDict
+ from dateutil.parser import parse
+ from slugify import slugify
+@@ -211,7 +212,28 @@ class Blink:
+ 
+     async def validate_homescreen(self, response):
+         """Validate and process homescreen response data."""
+-        self.homescreen = await response.json()
++        if response is None:
++            _LOGGER.error("No homescreen response received.")
++            raise BlinkSetupError
++
++        if response.status != 200:
++            body = await response.text()
++            _LOGGER.error(
++                "Homescreen request failed with status %s: %s",
++                response.status,
++                body[:200],
++            )
++            raise BlinkSetupError
++
++        try:
++            self.homescreen = await response.json()
++        except ContentTypeError as ex:
++            _LOGGER.error(
++                "Expected json homescreen response, got %s",
++                response.headers.get("Content-Type"),
++            )
++            raise BlinkSetupError from ex
++
+         self.auth.client_id = response.headers.get("Client-Id")
+         self.auth.user_id = response.headers.get("User-Id")
+ 
+diff --git a/tests/test_blink_functions.py b/tests/test_blink_functions.py
+index d2d6267..f0948b6 100644
+--- a/tests/test_blink_functions.py
++++ b/tests/test_blink_functions.py
+@@ -271,6 +271,7 @@ class TestBlinkFunctions(IsolatedAsyncioTestCase):
+     async def test_refresh(self, mock_req, mock_update):
+         """Test ability to refresh system."""
+         mock_update.return_value = {"network": {"sync_module_error": False}}
++        mock_req.return_value.status = 200
+         mock_req.return_value.json = mock.AsyncMock(return_value={})
+         self.blink.last_refresh = 0
+         self.blink.available = True

@@ -1,0 +1,20 @@
+.git
+.gitignore
+.claude
+.venv
+.ruff_cache
+__pycache__
+**/__pycache__
+*.pyc
+
+# Secrets and state: the token file carries the Blink password in plaintext,
+# and data/ is mounted at runtime rather than baked in.
+.env
+.blink_creds.json
+data
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+patches/README.md

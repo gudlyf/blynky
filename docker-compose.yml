@@ -1,0 +1,53 @@
+services:
+  blynky:
+    image: blynky:latest
+    build:
+      # blinkpy is fetched during the build, so the context is just this repo.
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    # The container always listens on 8080; this is only where that gets
+    # published. Loopback by default, to match the app's own HOST default —
+    # the UI has no authentication, so binding every host interface has to be
+    # a deliberate act. Set BIND_ADDR to a tailnet IP, or 0.0.0.0, in .env.
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-8080}:8080"
+
+    # Docker Desktop and OrbStack both define host.docker.internal already;
+    # Docker Engine on Linux does not. Pinning it costs nothing where it is
+    # already defined - under OrbStack host-gateway resolves to the same
+    # address the name does - and makes the file work unchanged on Linux.
+    #
+    # Resolving the name is only half of it. Ollama binds loopback unless told
+    # otherwise, and a container cannot reach that however the name resolves:
+    # the symptom is "Connect call failed", a refusal rather than a DNS error.
+    # Expose Ollama on the network (OLLAMA_HOST=0.0.0.0:11434, or the setting
+    # of that name in Ollama.app), or point OLLAMA_URL at a LAN/tailnet
+    # address it is actually listening on.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Optional, so this still comes up on a fresh clone that has no .env yet.
+    env_file:
+      - path: .env
+        required: false
+
+    # These win over anything in .env, which is the point: the checked-in
+    # example sets HOST=127.0.0.1, and a container that binds loopback is
+    # unreachable from the host.
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATA_DIR: /data
+      CREDFILE: /data/.blink_creds.json
+
+    # The Blink token lands in here as .blink_creds.json, alongside the clips
+    # and stills, so a restart reuses the session instead of asking for the
+    # 2FA code again. Bind-mounted rather than a named volume so the captures
+    # stay browsable from the host; ./data is already gitignored.
+    #
+    # Nothing prunes this. The library keeps every clip and still ever
+    # captured, so expect the host directory to grow without bound.
+    volumes:
+      - ./data:/data
