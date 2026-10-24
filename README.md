@@ -74,11 +74,11 @@ Open <http://127.0.0.1:8080> and sign in with your Blink email and password, plu
 
 You need Python 3.10+, [uv](https://docs.astral.sh/uv/), and `ffmpeg`/`ffprobe` on your `PATH`.
 
-Blynky depends on blinkpy's OAuth v2 login, which so far exists only on blinkpy's `dev` branch, not on PyPI. `pyproject.toml` therefore expects a blinkpy checkout next to this repo, pinned to the same commit the Docker image uses and with the same patches applied:
+Blynky pins a blinkpy commit because the pinned commit includes fixes that are not yet in any released blinkpy version. `pyproject.toml` therefore expects a blinkpy checkout next to this repo, pinned to the same commit the Docker image uses and with the same patches applied:
 
 ```bash
 git clone https://github.com/fronzbot/blinkpy.git ../blinkpy
-git -C ../blinkpy checkout 4d0c274f8e20bdf268949eb2d756bf527dc0ae7e
+git -C ../blinkpy checkout 2687c911a9ed124b466f1a111d0d8403bea70928
 git -C ../blinkpy apply "$PWD"/patches/*.patch
 
 cp .env.example .env

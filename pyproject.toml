@@ -15,7 +15,7 @@ dependencies = [
 [dependency-groups]
 dev = ["ruff>=0.16"]
 
-# The OAuth v2 flow this depends on is only in the local checkout, not on PyPI.
+# blinkpy is a local checkout pinned to a commit that includes fixes not yet on PyPI.
 [tool.uv.sources]
 blinkpy = { path = "../blinkpy" }
 

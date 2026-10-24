@@ -485,8 +485,8 @@ everything in `patches/`, and installs that. So the container builds on a
 machine that has only this repo, and the build is reproducible rather than
 dependent on whatever state a sibling directory happens to be in.
 
-The pin is a commit, not a version, because the OAuth v2 login this depends on
-is on blinkpy's `dev` branch and has never been released to PyPI.
+The pin is a commit, not a version, because the pinned commit includes fixes
+that are not yet in any released blinkpy version.
 
 `patches/` carries local fixes that are not upstream — see `patches/README.md`
 for what each one does and why. `git apply` fails the build if a patch no
