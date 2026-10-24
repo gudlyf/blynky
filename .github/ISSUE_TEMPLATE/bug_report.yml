@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in Blynky isn't working the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **Report a bug** in Blynky's
+        settings menu fills in the version and environment for you.
+
+        This issue is public, so please leave out camera names, addresses,
+        ntfy topics, Blink account details and anything a clip shows.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How to make it happen again, if you know.
+      placeholder: |
+        1. Open the library
+        2. Filter by "person"
+        3. ...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: |
+        Relevant lines from `docker compose logs blynky` or the terminal
+        running Blynky. Check them for anything private before pasting.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Blynky version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: How Blynky is running, and the browser you used.
+      render: text
