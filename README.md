@@ -203,13 +203,7 @@ The **[guide](docs/guide.md)** covers each part in depth:
 
 ## Contributing
 
-Issues and pull requests are welcome. To lint before sending a change:
-
-```bash
-uv run ruff check .
-```
-
-If you change blinkpy itself, put the change in `patches/` too, so that `uv run` and the Docker image keep using the same blinkpy.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup and what a change needs. To report a security problem, see [SECURITY.md](SECURITY.md). Don't open a public issue for one.
 
 ## License
 
