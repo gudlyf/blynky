@@ -5,6 +5,8 @@ import contextlib
 import logging
 import platform
 import shutil
+import subprocess
+from functools import cache
 from importlib import metadata
 from pathlib import Path
 
@@ -13,7 +15,10 @@ from aiohttp import WSMsgType, web
 from . import config, library, notify
 
 _LOGGER = logging.getLogger(__name__)
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+PACKAGE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = PACKAGE_DIR / "static"
+# Written by the Docker build, which has .git but not git at runtime.
+BUILD_FILE = PACKAGE_DIR / "BUILD"
 
 
 async def index(request):
@@ -35,6 +40,42 @@ def _version(package):
         return None
 
 
+def _git(*args):
+    """Run git against this checkout, or return None if that isn't possible."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=PACKAGE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
+
+
+@cache
+def build_info():
+    """Return the running version (nearest tag) and short commit hash.
+
+    From the file the image bakes in, else from git when running from a
+    checkout, else the package version with no commit.
+    """
+    try:
+        version, commit = BUILD_FILE.read_text().splitlines()[:2]
+    except (OSError, ValueError):
+        version = _git("describe", "--tags", "--always", "--dirty")
+        commit = _git("rev-parse", "--short", "HEAD")
+    else:
+        version = version if version != "unknown" else None
+    return {
+        "version": version or _version("blynky"),
+        "commit": commit or None,
+    }
+
+
 async def diagnostics(request):
     """Return the facts a bug report needs, and nothing that identifies the user.
 
@@ -45,7 +86,7 @@ async def diagnostics(request):
     cameras = list(monitor.cameras.values())
     return web.json_response(
         {
-            "version": _version("blynky"),
+            **build_info(),
             "blinkpy": _version("blinkpy"),
             "python": platform.python_version(),
             "platform": f"{platform.system()} {platform.machine()}",

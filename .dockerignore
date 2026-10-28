@@ -1,4 +1,3 @@
-.git
 .gitignore
 .claude
 .venv
@@ -6,6 +5,8 @@
 __pycache__
 **/__pycache__
 *.pyc
+
+# .git stays in: the version stage reads the tag and commit from it.
 
 # Secrets and state: the token file carries the Blink password in plaintext,
 # and data/ is mounted at runtime rather than baked in.
@@ -17,4 +18,3 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 README.md
-patches/README.md

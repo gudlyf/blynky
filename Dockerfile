@@ -6,12 +6,13 @@
 #     -e OLLAMA_URL=http://host.docker.internal:11434/v1 blynky
 #
 # blinkpy is fetched here rather than copied from ../blinkpy, so the build
-# does not depend on a sibling checkout. See patches/README.md.
+# does not depend on a sibling checkout. See docs/guide.md, "Where blinkpy
+# comes from".
 #
 # Settings come from the environment (-e / --env-file); .env and the cached
 # credentials are deliberately kept out of the image.
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS build
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -21,11 +22,28 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# The pinned blinkpy commit includes fixes that are not yet in any released
-# blinkpy version, so this tracks a commit rather than a version. Pinned,
-# not floating: dev moves, and an unpinned build would change underneath you.
-ARG BLINKPY_REPO=https://github.com/fronzbot/blinkpy.git
-ARG BLINKPY_REF=2687c911a9ed124b466f1a111d0d8403bea70928
+
+# Works out which Blynky this is - the nearest tag and the short commit - for
+# the settings menu and bug reports. Its own stage so that a new commit, which
+# changes .git, rebuilds only this and the one COPY that uses it. The [t] makes
+# .git optional: a tarball with no history still builds, as "unknown".
+FROM base AS version
+COPY .gi[t] /src/blynky.git
+RUN export GIT_DIR=/src/blynky.git \
+    && { git describe --tags --always 2>/dev/null || echo unknown; \
+         git rev-parse --short HEAD 2>/dev/null || echo; } > /BUILD
+
+
+FROM base AS build
+
+# Fetched from gudlyf/blinkpy, a fork of fronzbot/blinkpy, so the build
+# survives upstream disappearing. The pin is a commit on the fork's blynky
+# branch: upstream dev (which has fixes no blinkpy release does yet) plus
+# Blynky's own fixes as commits on top. Pinned, not floating, and the SHA is
+# what makes the fork safe to depend on: git verifies the content against it,
+# so nothing can be swapped in under a pinned commit.
+ARG BLINKPY_REPO=https://github.com/gudlyf/blinkpy.git
+ARG BLINKPY_REF=4d61f0d35f620847054fa2d26ee59e64be5a7d30
 
 # Fetching the one commit rather than cloning the history; GitHub serves a
 # bare SHA to fetch, so no branch name is needed and the pin is exact.
@@ -33,12 +51,6 @@ RUN git init -q /src/blinkpy \
     && git -C /src/blinkpy remote add origin "$BLINKPY_REPO" \
     && git -C /src/blinkpy fetch -q --depth 1 origin "$BLINKPY_REF" \
     && git -C /src/blinkpy checkout -q FETCH_HEAD
-
-# Local fixes that are not upstream. git apply exits non-zero if a patch does
-# not apply, so bumping BLINKPY_REF past a conflicting change fails the build
-# here rather than silently dropping the fix.
-COPY patches /src/patches
-RUN git -C /src/blinkpy apply --verbose /src/patches/*.patch
 
 WORKDIR /src/blynky
 
@@ -83,6 +95,9 @@ RUN useradd --create-home --uid 10001 blynky \
 VOLUME /data
 
 WORKDIR /src/blynky
+# Last, because it changes with every commit.
+COPY --from=version /BUILD /src/blynky/blynky/BUILD
+
 USER blynky
 EXPOSE 8080
 
