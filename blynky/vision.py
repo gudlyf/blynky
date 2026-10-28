@@ -21,9 +21,9 @@ _MODEL = config.OLLAMA_MODEL
 _PAUSE = config.PROVIDER_PAUSE
 
 if config.VISION_PROVIDER == "gemini":
-    assert (
-        config.GEMINI_API_KEY
-    ), "GEMINI_API_KEY is required when VISION_PROVIDER is 'gemini'"
+    assert config.GEMINI_API_KEY, (
+        "GEMINI_API_KEY is required when VISION_PROVIDER is 'gemini'"
+    )
     _ENDPOINT = f"{config.GEMINI_URL.rstrip('/')}/chat/completions"
     _MODEL = config.GEMINI_MODEL
     _HEADERS["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
