@@ -1,16 +1,118 @@
-"""Vision model client, speaking the OpenAI-compatible Ollama API."""
+"""Vision model client, speaking OpenAI-compatible APIs (Ollama, Gemini, etc.)."""
 
 import asyncio
 import base64
 import json
 import logging
+import random
 import re
+import time
 
 from aiohttp import ClientTimeout
 
 from . import config
 
 _LOGGER = logging.getLogger(__name__)
+
+# Active vision provider endpoint, headers, model and pause, with Gemini overrides.
+_ENDPOINT = f"{config.OLLAMA_URL.rstrip('/')}/chat/completions"
+_HEADERS: dict[str, str] = {}
+_MODEL = config.OLLAMA_MODEL
+_PAUSE = config.PROVIDER_PAUSE
+
+if config.VISION_PROVIDER == "gemini":
+    assert (
+        config.GEMINI_API_KEY
+    ), "GEMINI_API_KEY is required when VISION_PROVIDER is 'gemini'"
+    _ENDPOINT = f"{config.GEMINI_URL.rstrip('/')}/chat/completions"
+    _MODEL = config.GEMINI_MODEL
+    _HEADERS["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
+    if config.GEMINI_PAUSE is not None:
+        _PAUSE = config.GEMINI_PAUSE
+
+# Track the timestamp of the last request to pace calls across the process.
+_last_request_time = 0.0
+_pacer_lock = asyncio.Lock()
+
+
+async def _pace():
+    """Ensure at least _PAUSE seconds elapsed since last call."""
+    if _PAUSE <= 0:
+        return
+    global _last_request_time
+    async with _pacer_lock:
+        now = time.monotonic()
+        elapsed = now - _last_request_time
+        if elapsed < _PAUSE:
+            await asyncio.sleep(_PAUSE - elapsed)
+        _last_request_time = time.monotonic()
+
+
+def _retry_delay(response_headers, attempt):
+    """Calculate wait seconds for a retry, checking Retry-After first."""
+    retry_after = response_headers.get("Retry-After")
+    if retry_after:
+        try:
+            return float(retry_after)
+        except ValueError:
+            pass
+    base = config.VISION_RETRY_DELAY * (2**attempt)
+    # Add random jitter between 0 and 1 second to desynchronize calls
+    jitter = random.uniform(0.0, 1.0)
+    return base + jitter
+
+
+async def _post_chat(session, endpoint, headers, body, timeout):
+    """Post chat request with rate-limiting pacing and retry on 429/503."""
+    max_retries = config.VISION_MAX_RETRIES
+
+    for attempt in range(max_retries + 1):
+        await _pace()
+        try:
+            response = await session.post(
+                endpoint,
+                headers=headers,
+                json=body,
+                timeout=ClientTimeout(total=timeout),
+            )
+            text = await response.text()
+            if response.status == 200:
+                return response, text
+
+            # Transient rate-limit (429) or high demand / unavailable (503)
+            if response.status in (429, 503) and attempt < max_retries:
+                delay = _retry_delay(response.headers, attempt)
+                _LOGGER.warning(
+                    "vision API returned %s (attempt %d/%d), retrying in %.1fs: %s",
+                    response.status,
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    text[:200],
+                )
+                await asyncio.sleep(delay)
+                continue
+
+            _LOGGER.error("vision model returned %s: %s", response.status, text[:300])
+            return response, text
+        except (TimeoutError, asyncio.TimeoutError):
+            if attempt < max_retries:
+                delay = _retry_delay({}, attempt)
+                _LOGGER.warning(
+                    "vision request timed out (attempt %d/%d), retrying in %.1fs",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+            _LOGGER.error("vision model timed out after %ss", timeout)
+            return None, None
+        except Exception as error:  # noqa: BLE001
+            _LOGGER.error("vision request failed: %s", error)
+            return None, None
+    return None, None
+
 
 # A model that ignores "JSON and nothing else" usually still wraps the JSON in
 # a markdown fence, or pads it with a sentence either side. Both are recovered
@@ -77,12 +179,21 @@ def _normalise(name):
     return None
 
 
+def _is_empty_summary(text):
+    """Whether a description indicates nothing of note was detected."""
+    normalized = str(text).strip().lower()
+    return (
+        normalized.startswith("nothing of note")
+        or "nothing of note is present" in normalized
+    )
+
+
 def _coerce(payload):
     """Turn a parsed JSON reply into a result, or None if it is not one."""
     if not isinstance(payload, dict):
         return None
     summary = (payload.get("summary") or "").strip()
-    if not summary:
+    if not summary or _is_empty_summary(summary):
         return None
 
     subjects = payload.get("subjects")
@@ -123,7 +234,7 @@ def parse_reply(text):
     the archive can infer those from the text later.
     """
     text = (text or "").strip()
-    if not text:
+    if not text or _is_empty_summary(text):
         return None
 
     candidates = []
@@ -134,14 +245,21 @@ def parse_reply(text):
     if start >= 0 and end > start:
         candidates.append(text[start : end + 1])
 
+    saw_empty_summary = False
     for candidate in candidates:
         try:
             parsed = json.loads(candidate)
         except ValueError:
             continue
+        if isinstance(parsed, dict) and _is_empty_summary(parsed.get("summary") or ""):
+            saw_empty_summary = True
+            continue
         result = _coerce(parsed)
         if result:
             return result
+
+    if saw_empty_summary:
+        return None
 
     # Prose, or JSON that carried no summary. Either way the sentence itself
     # is still the description, which is exactly what this used to return.
@@ -220,7 +338,7 @@ async def identify(session, images, gallery):
     content.append({"type": "text", "text": config.IDENTIFY_PROMPT})
 
     body = {
-        "model": config.OLLAMA_MODEL,
+        "model": _MODEL,
         "max_tokens": config.MAX_TOKENS,
         "messages": [
             {"role": "system", "content": config.IDENTIFY_SYSTEM_PROMPT},
@@ -228,22 +346,17 @@ async def identify(session, images, gallery):
         ],
     }
 
+    response, text = await _post_chat(
+        session, _ENDPOINT, _HEADERS, body, timeout=config.IDENTIFY_TIMEOUT
+    )
+    if response is None or response.status != 200 or not text:
+        return None
+
     try:
-        response = await session.post(
-            f"{config.OLLAMA_URL}/chat/completions",
-            json=body,
-            timeout=ClientTimeout(total=config.IDENTIFY_TIMEOUT),
-        )
-        text = await response.text()
-        if response.status != 200:
-            _LOGGER.error("identify returned %s: %s", response.status, text[:300])
-            return None
         choice = json.loads(text)["choices"][0]
         return parse_identity(choice["message"].get("content"))
     except (KeyError, IndexError, ValueError) as error:
         _LOGGER.error("could not parse identify response: %s", error)
-    except (TimeoutError, asyncio.TimeoutError):
-        _LOGGER.error("identify timed out after %ss", config.IDENTIFY_TIMEOUT)
     except Exception as error:  # noqa: BLE001 - never kill the poll loop
         _LOGGER.error("identify request failed: %s", error)
     return None
@@ -263,7 +376,7 @@ async def describe(session, images):
     content.extend(_encode(payload) for payload in images)
 
     body = {
-        "model": config.OLLAMA_MODEL,
+        "model": _MODEL,
         "max_tokens": config.MAX_TOKENS,
         "messages": [
             {"role": "system", "content": config.SYSTEM_PROMPT},
@@ -271,21 +384,20 @@ async def describe(session, images):
         ],
     }
 
-    try:
-        response = await session.post(
-            f"{config.OLLAMA_URL}/chat/completions",
-            json=body,
-            timeout=ClientTimeout(total=config.VISION_TIMEOUT),
-        )
-        text = await response.text()
-        if response.status != 200:
-            _LOGGER.error("vision model returned %s: %s", response.status, text[:300])
-            return None
+    response, text = await _post_chat(
+        session, _ENDPOINT, _HEADERS, body, timeout=config.VISION_TIMEOUT
+    )
+    if response is None or response.status != 200 or not text:
+        return None
 
+    try:
         choice = json.loads(text)["choices"][0]
-        reply = parse_reply(choice["message"].get("content"))
+        raw_content = choice["message"].get("content")
+        reply = parse_reply(raw_content)
         if reply:
             return reply
+        if _is_empty_summary(raw_content or ""):
+            return None
         # A reasoning model that burns its whole budget thinking returns an
         # empty content field rather than an error.
         _LOGGER.error(
@@ -294,8 +406,6 @@ async def describe(session, images):
         )
     except (KeyError, IndexError, ValueError) as error:
         _LOGGER.error("could not parse vision response: %s", error)
-    except (TimeoutError, asyncio.TimeoutError):
-        _LOGGER.error("vision model timed out after %ss", config.VISION_TIMEOUT)
     except Exception as error:  # noqa: BLE001 - never kill the poll loop
         _LOGGER.error("vision request failed: %s", error)
     return None

@@ -25,13 +25,37 @@ POLL_SECONDS = max(60, int(os.environ.get("POLL_SECONDS", "60")))
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8080"))
 
+# Provider for the vision model: "ollama" (default) or "gemini".
+VISION_PROVIDER = os.environ.get("VISION_PROVIDER", "ollama").lower()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if VISION_PROVIDER == "gemini" and not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY is required when VISION_PROVIDER is 'gemini'")
+
+PROVIDER_PAUSE = float(os.environ.get("PROVIDER_PAUSE", "0"))
+
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
+
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_URL = os.environ.get(
+    "GEMINI_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+)
+GEMINI_PAUSE = (
+    float(os.environ["GEMINI_PAUSE"]) if "GEMINI_PAUSE" in os.environ else None
+)
+
+# Active vision model name for reporting in UI and diagnostics.
+VISION_MODEL = GEMINI_MODEL if VISION_PROVIDER == "gemini" else OLLAMA_MODEL
+
 MAX_FRAMES = int(os.environ.get("MAX_FRAMES", "4"))
 # Reasoning models spend tokens thinking before they answer, so this needs
 # headroom well beyond the length of the description itself.
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "1500"))
 VISION_TIMEOUT = int(os.environ.get("VISION_TIMEOUT", "180"))
+
+# Max retries on transient errors (429 Rate Limit, 503 High Demand).
+VISION_MAX_RETRIES = int(os.environ.get("VISION_MAX_RETRIES", "4"))
+VISION_RETRY_DELAY = float(os.environ.get("VISION_RETRY_DELAY", "5.0"))
 
 # Describe events already on the server when the app starts.
 CATCH_UP = os.environ.get("CATCH_UP") == "1"
