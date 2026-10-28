@@ -11,7 +11,7 @@
 # Settings come from the environment (-e / --env-file); .env and the cached
 # credentials are deliberately kept out of the image.
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS build
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -21,10 +21,29 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Works out which Blynky this is - the nearest tag and the short commit - for
+# the settings menu and bug reports. Its own stage so that a new commit, which
+# changes .git, rebuilds only this and the one COPY that uses it. The [t] makes
+# .git optional: a tarball with no history still builds, as "unknown".
+FROM base AS version
+COPY .gi[t] /src/blynky.git
+RUN export GIT_DIR=/src/blynky.git \
+    && { git describe --tags --always 2>/dev/null || echo unknown; \
+         git rev-parse --short HEAD 2>/dev/null || echo; } > /BUILD
+
+
+FROM base AS build
+
 # The pinned blinkpy commit includes fixes that are not yet in any released
 # blinkpy version, so this tracks a commit rather than a version. Pinned,
 # not floating: dev moves, and an unpinned build would change underneath you.
-ARG BLINKPY_REPO=https://github.com/fronzbot/blinkpy.git
+#
+# Fetched from a fork of fronzbot/blinkpy rather than from upstream directly,
+# so the build survives upstream disappearing. The SHA is what makes it safe:
+# git verifies the content against it, so neither repo can swap in different
+# code under a pinned commit. Sync the fork before bumping the pin.
+ARG BLINKPY_REPO=https://github.com/gudlyf/blinkpy.git
 ARG BLINKPY_REF=2687c911a9ed124b466f1a111d0d8403bea70928
 
 # Fetching the one commit rather than cloning the history; GitHub serves a
@@ -83,6 +102,9 @@ RUN useradd --create-home --uid 10001 blynky \
 VOLUME /data
 
 WORKDIR /src/blynky
+# Last, because it changes with every commit.
+COPY --from=version /BUILD /src/blynky/blynky/BUILD
+
 USER blynky
 EXPOSE 8080
 

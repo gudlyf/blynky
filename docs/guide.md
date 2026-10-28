@@ -80,6 +80,10 @@ only*.
   includes camera names, addresses or account details, and nothing is sent
   until you submit the issue on GitHub.
 
+The bottom of the menu shows which Blynky is running: the release tag and the
+short commit, such as `v0.1.1 · 72ef0a5`. A build made after a tag shows
+`git describe`'s form instead, `v0.1.1-3-gabc1234`.
+
 Desktop alerts and keeping the screen awake need a secure context: they are
 offered on `http://127.0.0.1` or over HTTPS (`tailscale serve`, a reverse
 proxy), and not at all over plain HTTP on the LAN, where browsers refuse them.
@@ -535,6 +539,18 @@ dependent on whatever state a sibling directory happens to be in.
 
 The pin is a commit, not a version, because the pinned commit includes fixes
 that are not yet in any released blinkpy version.
+
+It is fetched from [gudlyf/blinkpy](https://github.com/gudlyf/blinkpy), a fork
+of [fronzbot/blinkpy](https://github.com/fronzbot/blinkpy) kept in sync with
+it, so the build does not break if upstream goes away. The fork does not make
+the build trust anything new: git checks the fetched code against the pinned
+SHA, so a commit cannot be swapped out in either repo. To move the pin, sync
+the fork with upstream first, then point `BLINKPY_REF` at a commit on it. To
+build straight from upstream instead:
+
+```bash
+docker build --build-arg BLINKPY_REPO=https://github.com/fronzbot/blinkpy.git -t blynky .
+```
 
 `patches/` carries local fixes that are not upstream — see `patches/README.md`
 for what each one does and why. `git apply` fails the build if a patch no

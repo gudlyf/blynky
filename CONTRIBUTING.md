@@ -24,7 +24,7 @@ and `ffmpeg`. You also need blinkpy checked out next to this repo, at the
 commit pinned in the `Dockerfile` and with the local patches applied:
 
 ```bash
-git clone https://github.com/fronzbot/blinkpy.git ../blinkpy
+git clone https://github.com/gudlyf/blinkpy.git ../blinkpy
 git -C ../blinkpy checkout "$(sed -n 's/^ARG BLINKPY_REF=//p' Dockerfile)"
 git -C ../blinkpy apply "$PWD"/patches/*.patch
 

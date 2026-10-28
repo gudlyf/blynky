@@ -77,7 +77,7 @@ You need Python 3.10+, [uv](https://docs.astral.sh/uv/), and `ffmpeg`/`ffprobe` 
 Blynky pins a blinkpy commit because the pinned commit includes fixes that are not yet in any released blinkpy version. `pyproject.toml` therefore expects a blinkpy checkout next to this repo, pinned to the same commit the Docker image uses and with the same patches applied:
 
 ```bash
-git clone https://github.com/fronzbot/blinkpy.git ../blinkpy
+git clone https://github.com/gudlyf/blinkpy.git ../blinkpy
 git -C ../blinkpy checkout 2687c911a9ed124b466f1a111d0d8403bea70928
 git -C ../blinkpy apply "$PWD"/patches/*.patch
 

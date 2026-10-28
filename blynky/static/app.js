@@ -2654,7 +2654,7 @@ async function refreshBugLink() {
     navigator.standalone === true;
   const yesNo = (v) => (v === undefined ? "unknown" : v ? "yes" : "no");
   const lines = [
-    `Blynky: ${info.version ?? "unknown"}`,
+    `Blynky: ${info.version ?? "unknown"}${info.commit ? ` (${info.commit})` : ""}`,
     `blinkpy: ${info.blinkpy ?? "unknown"}`,
     `Python: ${info.python ?? "unknown"} on ${info.platform ?? "unknown"}`,
     `Docker: ${yesNo(info.docker)}`,
@@ -2676,6 +2676,11 @@ async function refreshBugLink() {
     environment: lines.join("\n"),
   });
   el("report-bug").href = `${ISSUE_URL}?${params}`;
+  // Same request, so the menu's footer says which build is running too.
+  if (info.version) {
+    el("app-version").textContent =
+      `Blynky ${info.version}${info.commit ? ` · ${info.commit}` : ""}`;
+  }
 }
 
 function openHelp() {

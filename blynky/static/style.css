@@ -400,6 +400,8 @@ h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .1px; white-s
 }
 .menu-note { margin: 0; padding: 2px 8px 6px; font-size: 12px; color: var(--muted); }
 .menu-note.paused { color: var(--alert); }
+.menu-version { padding-top: 6px; font-variant-numeric: tabular-nums; user-select: text; }
+.menu-version:empty { display: none; }
 
 .segmented {
   display: flex;
