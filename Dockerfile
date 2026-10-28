@@ -6,7 +6,8 @@
 #     -e OLLAMA_URL=http://host.docker.internal:11434/v1 blynky
 #
 # blinkpy is fetched here rather than copied from ../blinkpy, so the build
-# does not depend on a sibling checkout. See patches/README.md.
+# does not depend on a sibling checkout. See docs/guide.md, "Where blinkpy
+# comes from".
 #
 # Settings come from the environment (-e / --env-file); .env and the cached
 # credentials are deliberately kept out of the image.
@@ -35,16 +36,14 @@ RUN export GIT_DIR=/src/blynky.git \
 
 FROM base AS build
 
-# The pinned blinkpy commit includes fixes that are not yet in any released
-# blinkpy version, so this tracks a commit rather than a version. Pinned,
-# not floating: dev moves, and an unpinned build would change underneath you.
-#
-# Fetched from a fork of fronzbot/blinkpy rather than from upstream directly,
-# so the build survives upstream disappearing. The SHA is what makes it safe:
-# git verifies the content against it, so neither repo can swap in different
-# code under a pinned commit. Sync the fork before bumping the pin.
+# Fetched from gudlyf/blinkpy, a fork of fronzbot/blinkpy, so the build
+# survives upstream disappearing. The pin is a commit on the fork's blynky
+# branch: upstream dev (which has fixes no blinkpy release does yet) plus
+# Blynky's own fixes as commits on top. Pinned, not floating, and the SHA is
+# what makes the fork safe to depend on: git verifies the content against it,
+# so nothing can be swapped in under a pinned commit.
 ARG BLINKPY_REPO=https://github.com/gudlyf/blinkpy.git
-ARG BLINKPY_REF=2687c911a9ed124b466f1a111d0d8403bea70928
+ARG BLINKPY_REF=4d61f0d35f620847054fa2d26ee59e64be5a7d30
 
 # Fetching the one commit rather than cloning the history; GitHub serves a
 # bare SHA to fetch, so no branch name is needed and the pin is exact.
@@ -52,12 +51,6 @@ RUN git init -q /src/blinkpy \
     && git -C /src/blinkpy remote add origin "$BLINKPY_REPO" \
     && git -C /src/blinkpy fetch -q --depth 1 origin "$BLINKPY_REF" \
     && git -C /src/blinkpy checkout -q FETCH_HEAD
-
-# Local fixes that are not upstream. git apply exits non-zero if a patch does
-# not apply, so bumping BLINKPY_REF past a conflicting change fails the build
-# here rather than silently dropping the fix.
-COPY patches /src/patches
-RUN git -C /src/blinkpy apply --verbose /src/patches/*.patch
 
 WORKDIR /src/blynky
 

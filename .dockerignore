@@ -18,4 +18,3 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 README.md
-patches/README.md

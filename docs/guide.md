@@ -532,37 +532,57 @@ from "wedged".
 ### Where blinkpy comes from
 
 Running with `uv` uses the `../blinkpy` checkout. The image does not: it
-fetches blinkpy from GitHub at a commit pinned in the `Dockerfile`, applies
-everything in `patches/`, and installs that. So the container builds on a
+fetches blinkpy from GitHub at a commit pinned in the `Dockerfile` and
+installs that. So the container builds on a
 machine that has only this repo, and the build is reproducible rather than
 dependent on whatever state a sibling directory happens to be in.
 
-The pin is a commit, not a version, because the pinned commit includes fixes
-that are not yet in any released blinkpy version.
+It comes from [gudlyf/blinkpy](https://github.com/gudlyf/blinkpy), a fork of
+[fronzbot/blinkpy](https://github.com/fronzbot/blinkpy), so the build does not
+break if upstream goes away. The fork has two branches that matter:
 
-It is fetched from [gudlyf/blinkpy](https://github.com/gudlyf/blinkpy), a fork
-of [fronzbot/blinkpy](https://github.com/fronzbot/blinkpy) kept in sync with
-it, so the build does not break if upstream goes away. The fork does not make
-the build trust anything new: git checks the fetched code against the pinned
-SHA, so a commit cannot be swapped out in either repo. To move the pin, sync
-the fork with upstream first, then point `BLINKPY_REF` at a commit on it. To
-build straight from upstream instead:
+- **`dev`** is an exact copy of upstream's `dev`, kept current with GitHub's
+  *Sync fork* button. Nothing else is ever committed to it.
+- **`blynky`** is `dev` plus Blynky's own fixes, one commit each, with the
+  commit message saying what the fix is and why. The pin is always a commit
+  on this branch.
+
+The pin is a commit, not a version, because upstream `dev` has fixes that are
+not yet in any released blinkpy version. The fork does not make the build
+trust anything new: git checks the fetched code against the pinned SHA, so a
+commit cannot be swapped out in either repo.
+
+The fixes on `blynky` today:
+
+- **Harden `validate_homescreen`.** Upstream assumes the homescreen request
+  succeeded and returned JSON. When Blink answers with an HTML error or
+  throttling page, the log says only `ContentTypeError`, with no status or
+  body. The fix logs the status and the start of the body and raises
+  `BlinkSetupError` instead. Diagnostics only: Blynky already recovers from
+  the failure, it just doesn't say why without this.
+
+To move to a newer upstream:
 
 ```bash
-docker build --build-arg BLINKPY_REPO=https://github.com/fronzbot/blinkpy.git -t blynky .
+# in a clone of gudlyf/blinkpy, with fronzbot/blinkpy as the upstream remote
+git fetch upstream
+git push origin upstream/dev:dev          # or Sync fork on GitHub
+git checkout blynky
+git rebase upstream/dev                   # conflicts mean a fix needs redoing
+git log --oneline upstream/dev..blynky    # check it's just Blynky's fixes
+git push --force-with-lease origin blynky
+git tag -a "blynky-$(date +%F)" -m "Pinned by Blynky"
+git push origin "blynky-$(date +%F)"      # keeps the commit after rebases
+git rev-parse HEAD                        # the new BLINKPY_REF
 ```
 
-`patches/` carries local fixes that are not upstream — see `patches/README.md`
-for what each one does and why. `git apply` fails the build if a patch no
-longer applies, so moving `BLINKPY_REF` forward onto a conflicting change is
-loud rather than silent. Bump it with:
+Drop a fix from `blynky` once upstream has its own. Then set `BLINKPY_REF` in
+the `Dockerfile` to the new commit and rebuild, and check out the same commit
+in `../blinkpy` so the container and `uv run` stay on the same code.
 
-```bash
-docker build --build-arg BLINKPY_REF=<sha> -t blynky .
-```
-
-Keep the two in step: if you change `../blinkpy` for local development, add
-the change to `patches/` too, or the container and `uv run` will diverge.
+Because `blynky` is rebased, older pinned commits drop off the branch. The
+`blynky-<date>` tag is what keeps each one reachable, so older Blynky
+checkouts still build: don't delete those tags.
 
 ### Persistence
 

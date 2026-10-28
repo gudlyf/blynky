@@ -21,12 +21,11 @@ Thanks for helping! Bug reports, fixes and improvements are all welcome.
 
 Running without Docker needs Python 3.10+, [uv](https://docs.astral.sh/uv/)
 and `ffmpeg`. You also need blinkpy checked out next to this repo, at the
-commit pinned in the `Dockerfile` and with the local patches applied:
+commit pinned in the `Dockerfile`:
 
 ```bash
 git clone https://github.com/gudlyf/blinkpy.git ../blinkpy
 git -C ../blinkpy checkout "$(sed -n 's/^ARG BLINKPY_REF=//p' Dockerfile)"
-git -C ../blinkpy apply "$PWD"/patches/*.patch
 
 cp .env.example .env
 uv run run.py
@@ -59,10 +58,11 @@ To try the Docker build, run `docker compose up -d --build`.
   reading what older versions wrote.
 - **Go easy on Blink.** Don't poll more often than once a minute, and don't
   wake battery cameras unless the user asked for it.
-- **blinkpy changes go in `patches/`.** If a fix belongs in blinkpy, add it as
-  a numbered patch and describe it in `patches/README.md`, so that `uv run`
-  and the Docker image keep using the same code. Better yet, also send it
-  upstream.
+- **blinkpy changes go on the fork's `blynky` branch.** If a fix belongs in
+  blinkpy, open a pull request against the `blynky` branch of
+  [gudlyf/blinkpy](https://github.com/gudlyf/blinkpy), so that `uv run` and
+  the Docker image keep using the same code. Better yet, also send it
+  upstream to [fronzbot/blinkpy](https://github.com/fronzbot/blinkpy).
 - **Match the surrounding code.** Comments explain *why*, not *what*. The
   front end is plain JavaScript and CSS with no build step, and should stay
   that way.
