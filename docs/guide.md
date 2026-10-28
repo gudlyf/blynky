@@ -8,6 +8,7 @@ behaves, where things are kept, and why it works the way it does.
 - [The library](#the-library)
 - [The timeline](#the-timeline)
 - [What the model saw](#what-the-model-saw)
+- [Using Gemini as an alternative model](#using-gemini-as-an-alternative-model)
 - [Notifications](#notifications)
 - [Known people](#known-people)
 - [Where Blink keeps a clip, and the Sync now button](#where-blink-keeps-a-clip-and-the-sync-now-button)
@@ -245,6 +246,49 @@ button for the same thing. Each attempt is counted and a clip is dropped after
 A description arriving for a clip captured weeks ago updates the row it
 belongs to and nothing else: it does not flash a card, jump the view, or take
 the top of the timeline.
+
+## Using Gemini as an alternative model
+
+By default, Blynky uses a local vision model hosted on Ollama. If you prefer not
+to install, configure, or run Ollama on your machine—or want to run Blynky on
+low-power hardware without a dedicated GPU—Google Gemini can be used as an
+alternative cloud vision provider.
+
+### Recommended model: `gemini-3.5-flash-lite`
+
+`gemini-3.5-flash-lite` is the recommended model (and the default when Gemini
+is selected). It produces fast, high-quality descriptions and accurate subject
+tagging, while remaining within Google's free-tier limits (such as 15 requests
+per minute and 1,500 requests per day), which is more than enough to cover
+typical home camera activity.
+
+### Getting an API key
+
+1. Visit [Google AI Studio](https://aistudio.google.com/).
+2. Sign in with a Google account.
+3. Click **Get API key** and create a key in a new or existing project.
+
+### What to change in `.env`
+
+In your `.env` file, set `VISION_PROVIDER` to `gemini` and add your API key:
+
+```bash
+# Switch from ollama to gemini
+VISION_PROVIDER=gemini
+
+# Your Gemini API key from Google AI Studio (required when VISION_PROVIDER=gemini)
+GEMINI_API_KEY=your-gemini-api-key-here
+```
+
+Optional settings for Gemini:
+
+- `GEMINI_MODEL` — defaults to `gemini-3.5-flash-lite`. Can be pointed to other
+  models such as `gemini-3.5-flash` if desired.
+- `GEMINI_PAUSE` — minimum seconds to wait between vision requests (e.g. `4.5`
+  to avoid exceeding the free tier's 15 RPM limit during bursts or backfill).
+  Defaults to unset (`PROVIDER_PAUSE`, which is `0`).
+- `GEMINI_URL` — defaults to `https://generativelanguage.googleapis.com/v1beta/openai`
+  (Gemini's OpenAI-compatible endpoint).
 
 ## Notifications
 

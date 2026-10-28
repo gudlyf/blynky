@@ -116,8 +116,14 @@ Every setting is an environment variable, and all of them are optional. Put them
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OLLAMA_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint |
-| `OLLAMA_MODEL` | `minimax-m3:cloud` | Vision model; any vision-capable model works |
+| `VISION_PROVIDER` | `ollama` | Vision provider: `ollama` or `gemini` |
+| `OLLAMA_URL` | `http://localhost:11434/v1` | OpenAI-compatible Ollama endpoint |
+| `OLLAMA_MODEL` | `minimax-m3:cloud` | Vision model for Ollama; any vision-capable model works |
+| `PROVIDER_PAUSE` | `0` | Minimum seconds between requests to vision provider |
+| `GEMINI_API_KEY` | unset | Google Gemini API key |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Gemini model name |
+| `GEMINI_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini OpenAI-compatible base URL |
+| `GEMINI_PAUSE` | unset | Overrides `PROVIDER_PAUSE` when `VISION_PROVIDER` is `gemini` (e.g. `4.5` to avoid RPM rate limits) |
 | `HOST` / `PORT` | `127.0.0.1` / `8080` | Where the UI listens |
 | `POLL_SECONDS` | `60` | Seconds between Blink polls (minimum 60) |
 | `DATA_DIR` | `./data` | Where clips, stills and state are written |
@@ -133,6 +139,8 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `MAX_FRAMES` | `4` | Frames sampled per clip |
 | `MAX_TOKENS` | `1500` | Model output budget. Reasoning models need room to think, and too small a budget returns an empty answer |
 | `VISION_TIMEOUT` | `180` | Seconds before giving up on the model |
+| `VISION_MAX_RETRIES` | `4` | Max retries with exponential backoff on 429/503 responses |
+| `VISION_RETRY_DELAY` | `5.0` | Base delay in seconds for exponential backoff |
 | `CATCH_UP` | unset | `1` describes events already on the server at start-up |
 | `BACKFILL` | `1` | At start-up, describe saved clips that have no description |
 | `BACKFILL_PAUSE` | `2` | Seconds between clips while working through that backlog |
