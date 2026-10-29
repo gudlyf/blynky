@@ -109,7 +109,10 @@ SUBJECTS = ("person", "animal", "vehicle", "package")
 
 # Finer tags the model may add on top of SUBJECTS, closed for the same reason.
 # Kept short and capped per clip: a tag that is on everything finds nothing.
-# Each subject, and each recognised person's name, is a tag as well.
+# Each subject, and each recognised person's name, is a tag as well, and so
+# are a few derived from what is already known: "group" for two or more
+# people, "night" for dark or infrared footage, and "unknown" for a person
+# nobody was recognised as.
 DETAILS = ("dog", "cat", "deer", "bird", "bicycle", "delivery")
 MAX_DETAILS = 3
 
@@ -228,7 +231,8 @@ SYSTEM_PROMPT = (
 PROMPT = (
     "These frames are from one motion clip, in time order.\n"
     "Reply with JSON and nothing else, in exactly this shape:\n"
-    '{"summary": "...", "subjects": [...], "tags": [...], "people_count": 0}\n'
+    '{"summary": "...", "subjects": [...], "tags": [...], "people_count": 0, '
+    '"night": false}\n'
     "summary: in two sentences or fewer, what is happening. If nothing of "
     "note is present, say so plainly.\n"
     "subjects: which of " + ", ".join(SUBJECTS) + " you can actually see. "
@@ -236,5 +240,7 @@ PROMPT = (
     "tags: at most " + str(MAX_DETAILS) + " of " + ", ".join(DETAILS) + ", "
     "only those that clearly apply - delivery means a courier dropping off or "
     "collecting something. Most clips need none: use an empty list.\n"
-    "people_count: how many distinct people are visible, 0 if none."
+    "people_count: how many distinct people are visible, 0 if none.\n"
+    "night: true if the footage is dark or in black-and-white infrared night "
+    "vision, false if it is daylight or lit in colour."
 )

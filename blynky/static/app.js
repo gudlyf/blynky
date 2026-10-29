@@ -25,6 +25,10 @@ const state = {
 // working through it.
 const backfill = { pending: 0, running: false };
 
+// Re-describing clips from before tags existed. Can take hours on a big
+// archive, so it reports progress over the socket and can be stopped.
+const retag = { pending: 0, running: false, done: 0, total: 0, failed: 0 };
+
 // The manual pull of whatever clips Blink still holds. Blink only keeps a
 // clip where the account's storage puts it, and a poll that was not running -
 // or that the sync module was too busy to answer - never sees it at all.
@@ -913,6 +917,7 @@ async function openLibrary() {
   syncHistory("push");
   loadStats();
   refreshBackfill();
+  refreshRetag();
   loadPeople();
   // Coming back to a view that has fallen behind has to refetch; coming back
   // to one that is still current keeps its pages, and its scroll position.
@@ -1014,6 +1019,51 @@ async function startSync() {
     showMessage("Could not sync", "The server is unreachable.");
   }
   renderSync();
+}
+
+async function refreshRetag() {
+  try {
+    Object.assign(retag, await getJSON("/api/retag"));
+  } catch {
+    el("retag").hidden = true;
+    return;
+  }
+  renderRetag();
+}
+
+function renderRetag() {
+  const button = el("retag");
+  button.hidden = !retag.running && !retag.pending;
+  if (retag.running) {
+    const at = retag.done + retag.failed;
+    button.textContent = `Retagging ${at} of ${retag.total}… Stop`;
+    button.title = "Stop now. Clips already retagged keep their new tags";
+  } else {
+    button.textContent = `Retag ${retag.pending} older`;
+    button.title =
+      "Describe clips saved before tags existed again, newest first, so they get tags too";
+  }
+}
+
+async function toggleRetag() {
+  if (!retag.running) {
+    // One model call per clip: hours on a local model, and real money on a
+    // paid one. Worth saying before it starts, not after.
+    const ok = window.confirm(
+      `Describe ${retag.pending} older clips again so they get tags?\n\n` +
+        "That is one vision model request per clip, newest first. Their " +
+        "descriptions may change wording; a clip the model fails on keeps " +
+        "the one it has. You can stop at any time.",
+    );
+    if (!ok) return;
+  }
+  try {
+    const response = await fetch("/api/retag", { method: retag.running ? "DELETE" : "POST" });
+    Object.assign(retag, await response.json());
+  } catch {
+    // The socket will bring the real state when it next has any.
+  }
+  renderRetag();
 }
 
 async function startBackfill() {
@@ -2324,6 +2374,15 @@ function connect() {
       return;
     }
 
+    if (data.type === "retag") {
+      const finished = retag.running && !data.retag.running;
+      Object.assign(retag, data.retag);
+      renderRetag();
+      // New tags across the archive: the suggestions and counts are stale.
+      if (finished && lib.open) loadStats();
+      return;
+    }
+
     if (data.type === "ntfy") {
       state.ntfy = data.ntfy;
       renderNtfy();
@@ -2918,6 +2977,7 @@ el("filter-subject").addEventListener("change", applyFilters);
 el("filter-until").addEventListener("change", applyFilters);
 el("filter-clear").addEventListener("click", clearFilters);
 el("describe-missing").addEventListener("click", startBackfill);
+el("retag").addEventListener("click", toggleRetag);
 el("sync-now").addEventListener("click", startSync);
 el("follow").addEventListener("change", (e) => savePref("follow", e.target.checked));
 el("timeline-people").addEventListener("change", (e) => setPeopleOnly(e.target.checked));

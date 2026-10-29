@@ -273,11 +273,15 @@ def _coerce(payload):
         elif count == 0 and "person" in subjects:
             count = None
 
+    night = payload.get("night")
     return {
         "summary": summary,
         "subjects": subjects,
         "details": details,
         "people_count": count,
+        # Only a real boolean counts: "no" or 0 is the model not following the
+        # shape, and a guess here would mislabel the clip.
+        "night": night if isinstance(night, bool) else None,
     }
 
 
@@ -320,7 +324,13 @@ def parse_reply(text):
     # Prose, or JSON that carried no summary. Either way the sentence itself
     # is still the description, which is exactly what this used to return.
     _LOGGER.debug("vision reply was not the requested JSON; using it as prose")
-    return {"summary": text, "subjects": None, "details": [], "people_count": None}
+    return {
+        "summary": text,
+        "subjects": None,
+        "details": [],
+        "people_count": None,
+        "night": None,
+    }
 
 
 def _encode(payload):
@@ -421,7 +431,8 @@ async def identify(session, images, gallery):
 async def describe(session, images):
     """Ask the vision model what is in the frames.
 
-    Returns `{"summary", "subjects", "details", "people_count"}`, or None if the model
+    Returns `{"summary", "subjects", "details", "people_count", "night"}`, or
+    None if the model
     could not be reached or gave nothing back at all. `subjects` is None when
     the model did not report any, which is not the same as reporting none.
     """

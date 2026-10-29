@@ -245,13 +245,22 @@ existed have their subjects inferred from the wording and marked
 
 ### Tags
 
-Every capture shows its tags under the description: `#person` and the
-other subjects, then any of a few finer tags the model may add — `#dog`,
-`#cat`, `#deer`, `#bird`, `#bicycle` and `#delivery` (a courier dropping
-something off or collecting it) — then the name of anyone
-[recognised](#known-people), such as `#alice`. The model is told most clips
-need no finer tags and may give at most three, so a tag stays worth searching
-for. Like the subjects, the list is closed: a word outside it is dropped, so a
+Every capture shows its tags under the description:
+
+- **What was seen** — `#person`, `#animal`, `#vehicle`, `#package`.
+- **`#group`** — two or more people.
+- **Finer tags** the model may add — `#dog`, `#cat`, `#deer`, `#bird`,
+  `#bicycle` and `#delivery` (a courier dropping something off or collecting
+  it). The model is told most clips need none and may give at most three, so a
+  tag stays worth searching for.
+- **`#night`** — the model judged the footage dark or infrared. Judged from
+  the picture rather than the clock, so it needs no timezone or sunset times.
+- **Who** — the name of anyone [recognised](#known-people), such as `#alice`,
+  or **`#unknown`** for a person nobody was recognised as. `#unknown` only
+  appears once recognition has actually run, so with nobody enrolled, or
+  `IDENTIFY=0`, it is never added. `#person #unknown` is strangers only.
+
+Like the subjects, the list is closed: a word outside it is dropped, so a
 search never has to guess what the model might have called something.
 
 Type a tag into the library search, or click one on a capture, to filter by
@@ -259,10 +268,20 @@ it. Tags and words combine: `#dog #delivery front door` is everything tagged
 both `#dog` and `#delivery` whose description or camera mentions "front
 door". The search box suggests the tags in use, most common first.
 
-Subject and name tags come from what is already stored, so older captures
-have them too. The finer tags are only asked for in new descriptions, so
-captures described before they existed have none. A recognised name is a
-guess unless someone confirmed it, and its tag is shown dashed until then.
+Subject, group and name tags come from what is already stored, so older
+captures have them too. The finer tags and `#night` are only asked for in new
+descriptions. **Retag N older** in the library describes the captures from
+before then again, newest first, to give them the rest. That is one model
+request per clip — hours on a local model, and real cost on a paid one — so it
+asks first, shows its progress, and stops when clicked again. A clip the model
+fails on keeps the description it had, and is tried again on the next run.
+Retagging does not re-run recognition, so who is in a clip stays as it was.
+
+A recognised name is a guess unless someone confirmed it, and its tag is
+shown dashed until then.
+
+Push notifications carry the tags too. ntfy shows a tag that is an emoji name
+as the emoji — `#dog` arrives as a dog — and lists the rest under the message.
 
 Clips that never got a description — the model timed out, or answered with
 nothing — are described at start-up, oldest first, and the library offers a

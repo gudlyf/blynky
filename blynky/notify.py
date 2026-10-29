@@ -148,6 +148,17 @@ def _tags(subjects, known):
     return "eyes"
 
 
+def _all_tags(event, subjects, known):
+    """Return the Tags header: the emoji, then the capture's own tags.
+
+    ntfy turns any tag that is an emoji name into the emoji - #dog arrives as
+    a dog - and lists the rest under the message.
+    """
+    tags = [_tags(subjects, known)]
+    tags += [tag for tag in event.get("tags") or () if tag not in tags]
+    return ",".join(tags)
+
+
 def should_send(event):
     """Say whether this event is one to push, and why not when it is not."""
     if not config.NTFY_URL:
@@ -189,7 +200,7 @@ async def send(session, event, image=None):
     # the case where identification was never asked for.
     headers = {
         "Title": _header(event["camera"]),
-        "Tags": _tags(subjects, known),
+        "Tags": _all_tags(event, subjects, known),
         "Priority": str(config.NTFY_KNOWN_PRIORITY if known else config.NTFY_PRIORITY),
     }
     summary = event.get("summary") or "Motion detected."

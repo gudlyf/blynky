@@ -104,6 +104,9 @@ class Monitor:
         self._describing = set()
         # The backlog sweep over saved clips that have no description.
         self._backfill = None
+        # Re-describing clips from before tags existed, and how far it got.
+        self._retag = None
+        self._retag_state = {"done": 0, "total": 0, "failed": 0}
         # The manual pull of whatever Blink is still holding for each camera.
         self._sync = None
         # Making thumbnails for captures saved before thumbnails existed.
@@ -367,7 +370,13 @@ class Monitor:
         self._closing = True
         tasks = [
             task
-            for task in (self._task, self._backfill, self._thumbs, *self._describing)
+            for task in (
+                self._task,
+                self._backfill,
+                self._retag,
+                self._thumbs,
+                *self._describing,
+            )
             if task
         ]
         for task in tasks:
@@ -1053,6 +1062,102 @@ class Monitor:
         status["running"] = True
         return status
 
+    def retag_status(self):
+        """Return how many clips predate tags, and how a retag run is going."""
+        return {
+            "pending": len(self.library.needing_retag()),
+            "running": self._retag is not None and not self._retag.done(),
+            **self._retag_state,
+        }
+
+    def start_retag(self):
+        """Begin re-describing clips from before tags existed."""
+        status = self.retag_status()
+        if status["running"] or not status["pending"]:
+            return status
+        self._retag_state = {"done": 0, "total": status["pending"], "failed": 0}
+        self._retag = asyncio.create_task(self._run_retag())
+        return self.retag_status()
+
+    def stop_retag(self):
+        """Stop a retag run now. Clips it already finished keep their tags."""
+        if self._retag is not None and not self._retag.done():
+            self._retag.cancel()
+        return self.retag_status()
+
+    def _broadcast_retag(self):
+        self._broadcast({"type": "retag", "retag": self.retag_status()})
+
+    async def _run_retag(self):
+        """Re-describe every clip that has no tags yet, newest first."""
+        pending = self.library.needing_retag()
+        _LOGGER.info("retag: %d described clips predate tags", len(pending))
+        self._broadcast_retag()
+        try:
+            for record in pending:
+                if self._closing:
+                    break
+                try:
+                    if await self._retag_one(record):
+                        self._retag_state["done"] += 1
+                    else:
+                        self._retag_state["failed"] += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:  # noqa: BLE001 - one bad clip is not fatal
+                    self._retag_state["failed"] += 1
+                    _LOGGER.exception("retag of %s failed: %s", record["id"], error)
+                self._broadcast_retag()
+                # Same courtesy as the backlog: live motion shares the model.
+                await asyncio.sleep(config.BACKFILL_PAUSE)
+        except asyncio.CancelledError:
+            _LOGGER.info("retag: stopped")
+        finally:
+            _LOGGER.info(
+                "retag: tagged %d, failed %d, of %d",
+                self._retag_state["done"],
+                self._retag_state["failed"],
+                self._retag_state["total"],
+            )
+            # Cleared first, so the last broadcast already says "not running".
+            self._retag = None
+            self._broadcast_retag()
+
+    async def _retag_one(self, record):
+        """Re-describe one clip for its tags. Returns True if it got them.
+
+        Unlike the backlog, these already have a description, so a model that
+        fails or answers in prose changes nothing: an old description is
+        worth more than none. Who is in it is left alone too - re-asking
+        would double the cost of a run for no new tag.
+        """
+        images = await self._saved_images(record)
+        if not images:
+            return False
+        async with self._describe_lock:
+            reply = await vision.describe(self.session, images)
+        if not reply or reply["subjects"] is None:
+            return False
+
+        # Shielded: Stop landing mid-save would leave the .txt and the sidecar
+        # disagreeing. It only ever takes effect between clips.
+        await asyncio.shield(self._save_retag(record, reply))
+        return True
+
+    async def _save_retag(self, record, reply):
+        record["summary"] = reply["summary"]
+        record["subjects"] = reply["subjects"]
+        record["subjects_from"] = "model"
+        record["people_count"] = reply["people_count"]
+        record["details"] = reply["details"]
+        record["night"] = reply["night"]
+        base = library.dir_for(record["kind"], record["slug"])
+        await media.write_bytes(
+            base / f"{record['prefix']}.txt", reply["summary"].encode()
+        )
+        await library.write_sidecar(record)
+        self._broadcast({"type": "summary", "event": record, "backfill": True})
+
     def start_thumbnails(self):
         """Begin making thumbnails for captures that have none."""
         if self._thumbs is None or self._thumbs.done():
@@ -1112,6 +1217,19 @@ class Monitor:
 
     async def _redescribe(self, record):
         """Describe one already-saved event. Returns True if a summary landed."""
+        images = await self._saved_images(record)
+        if not images:
+            _LOGGER.warning("nothing to describe for %s", record["id"])
+            return False
+
+        base = library.dir_for(record["kind"], record["slug"])
+        await self._describe(
+            record, base / f"{record['prefix']}.txt", images, backfill=True
+        )
+        return bool(record["summary"])
+
+    async def _saved_images(self, record):
+        """Return the frames to describe a saved capture from, or []."""
         base = library.dir_for(record["kind"], record["slug"])
         prefix = record["prefix"]
 
@@ -1129,12 +1247,7 @@ class Monitor:
                 if still.exists():
                     images.append(still.read_bytes())
                     break
-        if not images:
-            _LOGGER.warning("nothing to describe for %s", record["id"])
-            return False
-
-        await self._describe(record, base / f"{prefix}.txt", images, backfill=True)
-        return bool(record["summary"])
+        return images
 
     async def _describe(self, event, text_path, images, backfill=False):
         """Caption one event and push the result to the UI."""
@@ -1160,6 +1273,7 @@ class Monitor:
             event["subjects_from"] = "text"
         if reply:
             event["details"] = reply["details"]
+            event["night"] = reply["night"]
 
         event["summary"] = summary
         event["state"] = "described" if summary else "no-description"

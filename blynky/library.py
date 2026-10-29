@@ -123,6 +123,8 @@ def make_record(kind, camera, slug, stamp, **extra):
         # Finer tags the model added, from config.DETAILS. None for anything
         # described before it was asked for them.
         "details": None,
+        # Whether the footage was dark or infrared, as the model judged it.
+        "night": None,
         # Every tag, derived from subjects, details and who by tags_for(). Not
         # stored: the sidecar keeps what it was derived from instead.
         "tags": [],
@@ -177,14 +179,25 @@ def tag_for_name(name):
 def tags_for(record):
     """Return a record's tags, without the leading #, in a stable order.
 
-    Subjects first, then the finer details, then whoever was recognised. All
-    of them come from closed lists - the subjects and details the model may
-    pick from, and the people enrolled - so a tag search never has to guess
-    at a word the model made up.
+    Subjects first, then the finer details, then the derived ones, then
+    whoever was recognised. All of them come from closed lists - the subjects
+    and details the model may pick from, a few fixed words, and the people
+    enrolled - so a tag search never has to guess at a word the model made up.
     """
-    tags = [name for name in config.SUBJECTS if name in (record.get("subjects") or ())]
+    subjects = record.get("subjects") or ()
+    tags = [name for name in config.SUBJECTS if name in subjects]
+    if (record.get("people_count") or 0) > 1:
+        tags.append("group")
     tags += [name for name in config.DETAILS if name in (record.get("details") or ())]
-    for name in record.get("who") or ():
+    if record.get("night") is True:
+        tags.append("night")
+    who = record.get("who")
+    # An empty list, not None: identification was asked and found nobody it
+    # knew. None means it never ran - switched off, or nobody enrolled yet -
+    # and calling everyone a stranger then would only be noise.
+    if "person" in subjects and who == []:
+        tags.append("unknown")
+    for name in who or ():
         tag = tag_for_name(name)
         if tag and tag not in tags:
             tags.append(tag)
@@ -380,6 +393,8 @@ def _record_from_parts(kind, slug, prefix, parts, names):
         record["subjects_from"] = "text"
     details = stored.get("details")
     record["details"] = details if isinstance(details, list) else None
+    night = stored.get("night")
+    record["night"] = night if isinstance(night, bool) else None
     record["tags"] = tags_for(record)
 
     record["digest"] = stored.get("digest")
@@ -486,6 +501,22 @@ class Library:
             and (record["describe_attempts"] or 0) < max_attempts
         ]
         return pending[::-1]
+
+    def needing_retag(self):
+        """Return described motion from before tags existed, newest first.
+
+        Newest first, unlike the description backlog: these already have a
+        description, so nothing is missing, and the recent ones are what a
+        tag search is most likely to be looking for.
+        """
+        return [
+            record
+            for record in self._records
+            if record["kind"] == MOTION
+            and record["summary"]
+            and record["details"] is None
+            and (record["clip"] or record["image"])
+        ]
 
     def missing_thumbs(self):
         """Return captures with a still but no thumbnail, newest first.
