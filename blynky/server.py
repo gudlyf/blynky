@@ -290,16 +290,6 @@ async def backfill(request):
     return web.json_response(monitor.start_backfill())
 
 
-async def retag(request):
-    """Report on, start or stop re-describing clips from before tags existed."""
-    monitor = request.app["monitor"]
-    if request.method == "POST":
-        return web.json_response(monitor.start_retag())
-    if request.method == "DELETE":
-        return web.json_response(monitor.stop_retag())
-    return web.json_response(monitor.retag_status())
-
-
 async def sync(request):
     """Pull the clips Blink still holds, and say how it is going."""
     monitor = request.app["monitor"]
@@ -405,9 +395,6 @@ def create_app(monitor):
     app.router.add_delete("/api/people/{slug}", forget_person)
     app.router.add_get("/api/backfill", backfill)
     app.router.add_post("/api/backfill", backfill)
-    app.router.add_get("/api/retag", retag)
-    app.router.add_post("/api/retag", retag)
-    app.router.add_delete("/api/retag", retag)
     app.router.add_get("/api/sync", sync)
     app.router.add_post("/api/sync", sync)
     app.router.add_get("/api/ntfy", ntfy)

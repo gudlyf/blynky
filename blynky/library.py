@@ -123,6 +123,9 @@ def make_record(kind, camera, slug, stamp, **extra):
         # Finer tags the model added, from config.DETAILS. None for anything
         # described before it was asked for them.
         "details": None,
+        # Whether details and night came from the model ("model") or were read
+        # out of the description's wording ("text"), like subjects_from.
+        "details_from": None,
         # Whether the footage was dark or infrared, as the model judged it.
         "night": None,
         # Every tag, derived from subjects, details and who by tags_for(). Not
@@ -169,6 +172,76 @@ def subjects_from_text(summary):
         if not match.group(1):
             return ["person"]
     return []
+
+
+# The words a description uses for each finer tag. Read out of descriptions
+# written before the model was asked for tags, so the whole archive can be
+# searched by them without describing anything again.
+_DETAIL_WORDS = {
+    "dog": r"dogs?|pupp(?:y|ies)",
+    "cat": r"cats?|kittens?",
+    "deer": r"deer|fawns?",
+    "bird": r"birds?|crows?|robins?|turkeys?|geese|goose|ducks|hawks?|pigeons?"
+    r"|sparrows?",
+    "bicycle": r"bicycles?|bikes?|cyclists?|bicyclists?",
+    # A courier, or something being dropped off - not a FedEx truck driving
+    # past on the road, which is no delivery to this house.
+    "delivery": r"(?:delivery|ups|fedex|usps|amazon|dhl)\s+"
+    r"(?:driver|person|worker|man|men|courier|uniform)s?"
+    r"|couriers?|mail\s?carriers?|mail(?:man|men)|delivering|delivers"
+    r"|(?:drops?|dropped|leaves|left|places?|placed|sets?)\s+(?:off\s+)?"
+    r"(?:a|an|the|two|several)\s+(?:\w+\s+)?(?:package|parcel|box)(?:e?s)?",
+}
+_DETAILS_IN_TEXT = {
+    name: re.compile(rf"\b(?:{words})\b", re.IGNORECASE)
+    for name, words in _DETAIL_WORDS.items()
+}
+_NIGHT_IN_TEXT = re.compile(
+    r"\b(?:night(?:time)?|infrared|night[- ]vision|black[- ]and[- ]white"
+    r"|gr[ae]yscale)\b",
+    re.IGNORECASE,
+)
+# "No people, animals, or deliveries appear" is how the model reports an empty
+# clip. A negating word earlier in the sentence cancels a match, unless a
+# "but" or "while" turns the sentence around in between.
+_NEGATION = re.compile(r"\b(?:no|nothing|without|not|neither|nor|none)\b", re.I)
+_TURN = re.compile(r"\bbut\b|\bwhile\b|\bthough\b|;", re.IGNORECASE)
+_SENTENCE = re.compile(r"[^.!?]+")
+
+
+def _negated(sentence, at):
+    """Whether a match at this offset sits in a negated part of the sentence."""
+    before = sentence[:at]
+    negation = max((m.end() for m in _NEGATION.finditer(before)), default=-1)
+    if negation < 0:
+        return False
+    return not any(m.start() > negation for m in _TURN.finditer(before))
+
+
+def details_from_text(summary):
+    """Guess the finer tags a description mentions, in config order."""
+    found = set()
+    for sentence in _SENTENCE.finditer(summary or ""):
+        text = sentence.group()
+        for name, pattern in _DETAILS_IN_TEXT.items():
+            if name not in found and any(
+                not _negated(text, match.start()) for match in pattern.finditer(text)
+            ):
+                found.add(name)
+    return [name for name in config.DETAILS if name in found]
+
+
+def infer_details(record):
+    """Fill in details and night from a record's description, marked as such.
+
+    Night is never negated: "nothing of note in this nighttime clip" is still
+    a night clip. Only ever True or unset - a description that does not say
+    it was dark is not evidence that it was light.
+    """
+    record["details"] = details_from_text(record["summary"])
+    record["details_from"] = "text"
+    if _NIGHT_IN_TEXT.search(record["summary"] or ""):
+        record["night"] = True
 
 
 def tag_for_name(name):
@@ -392,9 +465,16 @@ def _record_from_parts(kind, slug, prefix, parts, names):
         record["subjects"] = subjects_from_text(record["summary"])
         record["subjects_from"] = "text"
     details = stored.get("details")
-    record["details"] = details if isinstance(details, list) else None
     night = stored.get("night")
-    record["night"] = night if isinstance(night, bool) else None
+    if isinstance(details, list) and stored.get("details_from") != "text":
+        record["details"] = details
+        record["details_from"] = "model"
+        record["night"] = night if isinstance(night, bool) else None
+    elif record["summary"]:
+        # Described before the model was asked for tags. Read from the wording
+        # on every load, even if a guess was saved since, so a better word
+        # list here reaches the whole archive on the next restart.
+        infer_details(record)
     record["tags"] = tags_for(record)
 
     record["digest"] = stored.get("digest")
@@ -501,22 +581,6 @@ class Library:
             and (record["describe_attempts"] or 0) < max_attempts
         ]
         return pending[::-1]
-
-    def needing_retag(self):
-        """Return described motion from before tags existed, newest first.
-
-        Newest first, unlike the description backlog: these already have a
-        description, so nothing is missing, and the recent ones are what a
-        tag search is most likely to be looking for.
-        """
-        return [
-            record
-            for record in self._records
-            if record["kind"] == MOTION
-            and record["summary"]
-            and record["details"] is None
-            and (record["clip"] or record["image"])
-        ]
 
     def missing_thumbs(self):
         """Return captures with a still but no thumbnail, newest first.

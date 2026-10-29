@@ -269,13 +269,15 @@ both `#dog` and `#delivery` whose description or camera mentions "front
 door". The search box suggests the tags in use, most common first.
 
 Subject, group and name tags come from what is already stored, so older
-captures have them too. The finer tags and `#night` are only asked for in new
-descriptions. **Retag N older** in the library describes the captures from
-before then again, newest first, to give them the rest. That is one model
-request per clip — hours on a local model, and real cost on a paid one — so it
-asks first, shows its progress, and stops when clicked again. A clip the model
-fails on keeps the description it had, and is tried again on the next run.
-Retagging does not re-run recognition, so who is in a clip stays as it was.
+captures have them too. The finer tags and `#night` are only asked of the
+model for new descriptions. For captures described before then, they are read
+out of the description's wording instead — "a tan dog", "a delivery driver",
+"in this nighttime clip" — with no model involved, and marked
+`details_from: "text"` the way inferred subjects are. Negation is respected,
+so "no people, animals, or deliveries appear" tags nothing, and a FedEx truck
+driving past on the road is not a `#delivery`. The inference is redone on
+every start rather than saved, so a better word list reaches the whole archive
+on the next restart.
 
 A recognised name is a guess unless someone confirmed it, and its tag is
 shown dashed until then.
