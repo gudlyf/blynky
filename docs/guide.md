@@ -156,7 +156,7 @@ capture by retention and moved with it by `scripts/rename_camera.py`.
 
 The **Library** tab in the header opens the archive: newest first, grouped
 by day, filtered by camera, by clips-versus-stills or by what was seen, and
-searchable across the descriptions. **Up to** jumps back to a given day,
+searchable across the descriptions and by [tag](#tags). **Up to** jumps back to a given day,
 showing that day and everything before it, without scrolling through
 everything since. Clicking a capture opens it full-size — clips play in place,
 and the arrow keys (or a swipe, on a touch screen) walk the archive without
@@ -242,6 +242,27 @@ kept as the description and the subjects are left unset, which means "not
 known" rather than "nothing was there". Descriptions written before this
 existed have their subjects inferred from the wording and marked
 `subjects_from: "text"`, so a guess is never passed off as an observation.
+
+### Tags
+
+Every capture shows its tags under the description: `#person` and the
+other subjects, then any of a few finer tags the model may add — `#dog`,
+`#cat`, `#deer`, `#bird`, `#bicycle` and `#delivery` (a courier dropping
+something off or collecting it) — then the name of anyone
+[recognised](#known-people), such as `#alice`. The model is told most clips
+need no finer tags and may give at most three, so a tag stays worth searching
+for. Like the subjects, the list is closed: a word outside it is dropped, so a
+search never has to guess what the model might have called something.
+
+Type a tag into the library search, or click one on a capture, to filter by
+it. Tags and words combine: `#dog #delivery front door` is everything tagged
+both `#dog` and `#delivery` whose description or camera mentions "front
+door". The search box suggests the tags in use, most common first.
+
+Subject and name tags come from what is already stored, so older captures
+have them too. The finer tags are only asked for in new descriptions, so
+captures described before they existed have none. A recognised name is a
+guess unless someone confirmed it, and its tag is shown dashed until then.
 
 Clips that never got a description — the model timed out, or answered with
 nothing — are described at start-up, oldest first, and the library offers a

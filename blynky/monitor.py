@@ -1158,6 +1158,8 @@ class Monitor:
             # evidence available, so read them the way the archive does.
             event["subjects"] = library.subjects_from_text(summary)
             event["subjects_from"] = "text"
+        if reply:
+            event["details"] = reply["details"]
 
         event["summary"] = summary
         event["state"] = "described" if summary else "no-description"

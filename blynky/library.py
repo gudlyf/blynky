@@ -120,6 +120,12 @@ def make_record(kind, camera, slug, stamp, **extra):
         # Whether subjects came from the model ("model") or were inferred from
         # the wording of an older description ("text").
         "subjects_from": None,
+        # Finer tags the model added, from config.DETAILS. None for anything
+        # described before it was asked for them.
+        "details": None,
+        # Every tag, derived from subjects, details and who by tags_for(). Not
+        # stored: the sidecar keeps what it was derived from instead.
+        "tags": [],
         # How many times describing this has been attempted, so a clip the
         # model can never handle is not retried on every restart.
         "describe_attempts": 0,
@@ -163,10 +169,44 @@ def subjects_from_text(summary):
     return []
 
 
+def tag_for_name(name):
+    """Return the tag a known person's name is filed under."""
+    return slugify(name)
+
+
+def tags_for(record):
+    """Return a record's tags, without the leading #, in a stable order.
+
+    Subjects first, then the finer details, then whoever was recognised. All
+    of them come from closed lists - the subjects and details the model may
+    pick from, and the people enrolled - so a tag search never has to guess
+    at a word the model made up.
+    """
+    tags = [name for name in config.SUBJECTS if name in (record.get("subjects") or ())]
+    tags += [name for name in config.DETAILS if name in (record.get("details") or ())]
+    for name in record.get("who") or ():
+        tag = tag_for_name(name)
+        if tag and tag not in tags:
+            tags.append(tag)
+    return tags
+
+
+# Every field a sidecar leaves out: derived from the rest, or from the disk.
+_UNSTORED = {"bytes", "tags"}
+
+
 async def write_sidecar(record):
-    """Persist a record next to its media so a restart can find it again."""
+    """Persist a record next to its media so a restart can find it again.
+
+    Also refreshes the record's tags. Everything that changes what a record
+    is tagged with saves it straight after, so this is the one place that
+    cannot be missed - and it happens before the change is broadcast.
+    """
+    record["tags"] = tags_for(record)
     path = dir_for(record["kind"], record["slug"]) / f"{record['prefix']}.json"
-    payload = json.dumps({k: v for k, v in record.items() if k != "bytes"}, indent=1)
+    payload = json.dumps(
+        {k: v for k, v in record.items() if k not in _UNSTORED}, indent=1
+    )
     try:
         await asyncio.to_thread(_write_text, path, payload)
     except OSError as error:  # noqa: BLE001 - the media itself is already safe
@@ -338,6 +378,9 @@ def _record_from_parts(kind, slug, prefix, parts, names):
         # there is to go on, so say so rather than passing it off as observed.
         record["subjects"] = subjects_from_text(record["summary"])
         record["subjects_from"] = "text"
+    details = stored.get("details")
+    record["details"] = details if isinstance(details, list) else None
+    record["tags"] = tags_for(record)
 
     record["digest"] = stored.get("digest")
     record["bytes"] = sum(size for _, size in parts.values())
@@ -482,7 +525,7 @@ class Library:
         back to a given day without paging through everything since.
         """
         after = _decode_cursor(cursor)
-        needle = (search or "").strip().lower()
+        tags, needle = split_search(search)
         matches = []
         for record in self._records:
             if camera and record["slug"] != camera:
@@ -492,6 +535,8 @@ class Library:
             if subject and subject not in (record["subjects"] or ()):
                 continue
             if until and (parse_stamp(record["stamp"]) or _EPOCH) > until:
+                continue
+            if tags and not tags.issubset(record["tags"]):
                 continue
             if needle and needle not in (record["summary"] or "").lower():
                 if needle not in record["camera"].lower():
@@ -516,7 +561,10 @@ class Library:
         clips = sum(1 for record in self._records if record["clip"])
         stills = sum(1 for record in self._records if record["kind"] == STILL)
         per_camera = {}
+        tags = {}
         for record in self._records:
+            for tag in record["tags"]:
+                tags[tag] = tags.get(tag, 0) + 1
             entry = per_camera.setdefault(
                 record["slug"], {"slug": record["slug"], "camera": None, "count": 0}
             )
@@ -533,7 +581,25 @@ class Library:
             "oldest": self._records[-1]["stamp"] if self._records else None,
             "newest": self._records[0]["stamp"] if self._records else None,
             "cameras": sorted(per_camera.values(), key=lambda e: e["camera"] or ""),
+            # Most used first, for suggesting tags as someone types.
+            "tags": dict(sorted(tags.items(), key=lambda item: (-item[1], item[0]))),
         }
+
+
+def split_search(search):
+    """Split a search into the #tags it names and the text that is left.
+
+    "#dog #delivery front door" is every capture tagged both dog and delivery
+    whose description or camera mentions "front door".
+    """
+    tags, words = set(), []
+    for word in (search or "").lower().split():
+        if word.startswith("#"):
+            if word[1:]:
+                tags.add(word[1:])
+        else:
+            words.append(word)
+    return tags, " ".join(words)
 
 
 def _sort_key(record):

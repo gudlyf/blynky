@@ -866,6 +866,30 @@ span.tl-thumb .icon { width: 14px; height: 14px; }
 }
 .tl-who.sure { color: var(--accent); }
 
+/* ---- tags ---- */
+
+.tl-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.tags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tag {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+button.tag { cursor: pointer; }
+button.tag:hover { color: var(--text); border-color: var(--muted); }
+.tag.person { color: var(--accent); }
+/* A name the model guessed is hedged the same way as on the timeline. */
+.tag.person.guess { color: var(--ok); border-style: dashed; }
+/* One line in a tile, so tiles with and without tags stay the same height. */
+.tile-foot .tags { flex-wrap: nowrap; overflow: hidden; min-height: 18px; }
+
 /* ---- who is this ---- */
 
 .viewer-who {
@@ -1454,6 +1478,11 @@ span.toast-thumb { display: grid; place-items: center; color: var(--muted); }
   overflow-y: auto;
 }
 .viewer-summary.empty { opacity: .55; font-style: italic; }
+.viewer-tags { margin: 0; display: flex; justify-content: center; flex: none; }
+.viewer-tags .tag { font-size: 12px; background: rgb(255 255 255 / .08); border-color: rgb(255 255 255 / .18); color: #c9d2da; }
+.viewer-tags .tag.person { color: #8cc4ff; }
+.viewer-tags .tag.person.guess { color: inherit; }
+.viewer-tags button.tag:hover { color: #fff; border-color: rgb(255 255 255 / .4); }
 
 /* ---- view changes ---- */
 

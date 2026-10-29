@@ -262,8 +262,11 @@
         <div class="filters">
           <label class="search">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-            <input type="search" id="filter-search" placeholder="Search descriptions"
-                   aria-label="Search descriptions" autocomplete="off" enterkeyhint="search">
+            <input type="search" id="filter-search" placeholder="Search, or #tag"
+                   aria-label="Search descriptions, or #tag to filter by tag"
+                   title="Words search the descriptions; #dog, #delivery or a person's #name filter by tag"
+                   list="tag-suggestions" autocomplete="off" enterkeyhint="search">
+            <datalist id="tag-suggestions"></datalist>
           </label>
           <select id="filter-camera" aria-label="Camera">
             <option value="">All cameras</option>
@@ -332,6 +335,7 @@
       </button>
     </div>
     <p class="viewer-summary" id="viewer-summary"></p>
+    <p class="viewer-tags" id="viewer-tags" hidden></p>
 
     <!-- Tag whoever is in this capture, so the model can recognise them
          later. Every reference comes out of real footage at the angle and
