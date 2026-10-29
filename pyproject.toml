@@ -1,6 +1,6 @@
 [project]
 name = "blynky"
-version = "0.1.1"
+version = "0.2.0"
 description = "A self-hosted live view and searchable archive for Blink cameras, with motion clips described by a local vision model."
 requires-python = ">=3.10"
 license = "MIT"
