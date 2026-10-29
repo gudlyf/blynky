@@ -156,7 +156,7 @@ capture by retention and moved with it by `scripts/rename_camera.py`.
 
 The **Library** tab in the header opens the archive: newest first, grouped
 by day, filtered by camera, by clips-versus-stills or by what was seen, and
-searchable across the descriptions. **Up to** jumps back to a given day,
+searchable across the descriptions and by [tag](#tags). **Up to** jumps back to a given day,
 showing that day and everything before it, without scrolling through
 everything since. Clicking a capture opens it full-size — clips play in place,
 and the arrow keys (or a swipe, on a touch screen) walk the archive without
@@ -242,6 +242,48 @@ kept as the description and the subjects are left unset, which means "not
 known" rather than "nothing was there". Descriptions written before this
 existed have their subjects inferred from the wording and marked
 `subjects_from: "text"`, so a guess is never passed off as an observation.
+
+### Tags
+
+Every capture shows its tags under the description:
+
+- **What was seen** — `#person`, `#animal`, `#vehicle`, `#package`.
+- **`#group`** — two or more people.
+- **Finer tags** the model may add — `#dog`, `#cat`, `#deer`, `#bird`,
+  `#bicycle` and `#delivery` (a courier dropping something off or collecting
+  it). The model is told most clips need none and may give at most three, so a
+  tag stays worth searching for.
+- **`#night`** — the model judged the footage dark or infrared. Judged from
+  the picture rather than the clock, so it needs no timezone or sunset times.
+- **Who** — the name of anyone [recognised](#known-people), such as `#alice`,
+  or **`#unknown`** for a person nobody was recognised as. `#unknown` only
+  appears once recognition has actually run, so with nobody enrolled, or
+  `IDENTIFY=0`, it is never added. `#person #unknown` is strangers only.
+
+Like the subjects, the list is closed: a word outside it is dropped, so a
+search never has to guess what the model might have called something.
+
+Type a tag into the library search, or click one on a capture, to filter by
+it. Tags and words combine: `#dog #delivery front door` is everything tagged
+both `#dog` and `#delivery` whose description or camera mentions "front
+door". The search box suggests the tags in use, most common first.
+
+Subject, group and name tags come from what is already stored, so older
+captures have them too. The finer tags and `#night` are only asked of the
+model for new descriptions. For captures described before then, they are read
+out of the description's wording instead — "a tan dog", "a delivery driver",
+"in this nighttime clip" — with no model involved, and marked
+`details_from: "text"` the way inferred subjects are. Negation is respected,
+so "no people, animals, or deliveries appear" tags nothing, and a FedEx truck
+driving past on the road is not a `#delivery`. The inference is redone on
+every start rather than saved, so a better word list reaches the whole archive
+on the next restart.
+
+A recognised name is a guess unless someone confirmed it, and its tag is
+shown dashed until then.
+
+Push notifications carry the tags too. ntfy shows a tag that is an emoji name
+as the emoji — `#dog` arrives as a dog — and lists the rest under the message.
 
 Clips that never got a description — the model timed out, or answered with
 nothing — are described at start-up, oldest first, and the library offers a

@@ -156,6 +156,30 @@ _SYNONYMS = {
 }
 
 
+# The model's own words for the finer tags in config.DETAILS, and the subject
+# each implies: a dog the model tagged is an animal even if it forgot to say so.
+_DETAIL_SYNONYMS = {
+    "dog": "dog",
+    "puppy": "dog",
+    "cat": "cat",
+    "kitten": "cat",
+    "deer": "deer",
+    "bird": "bird",
+    "bicycle": "bicycle",
+    "bike": "bicycle",
+    "cyclist": "bicycle",
+    "delivery": "delivery",
+    "courier": "delivery",
+}
+_DETAIL_SUBJECT = {
+    "dog": "animal",
+    "cat": "animal",
+    "deer": "animal",
+    "bird": "animal",
+    "bicycle": "vehicle",
+}
+
+
 def _singulars(word):
     """Yield a word and its plausible singulars, longest form first."""
     yield word
@@ -167,16 +191,38 @@ def _singulars(word):
         yield word[:-1]
 
 
-def _normalise(name):
-    """Map one reported subject onto the closed vocabulary, or None."""
-    word = str(name).strip().lower()
+def _normalise(name, vocabulary=_SYNONYMS):
+    """Map one reported word onto a closed vocabulary, or None."""
+    word = str(name).strip().lstrip("#").lower()
     # "delivery person", "parked car": the last word is the head noun, and
     # what the model is actually reporting.
     for part in [word, *reversed(word.split())]:
         for candidate in _singulars(part):
-            if candidate in _SYNONYMS:
-                return _SYNONYMS[candidate]
+            if candidate in vocabulary:
+                return vocabulary[candidate]
     return None
+
+
+def _details(payload):
+    """Read the finer tags out of a reply, capped and in config order."""
+    words = []
+    for key in ("tags", "subjects"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            value = [value]
+        if isinstance(value, list):
+            words.extend(value)
+    # Subjects are read too: a model asked for "animal" that answers "dog"
+    # has told us which animal.
+    # Capped in the order the model gave them, which is usually most relevant
+    # first, then put in config order so equal tag sets always compare equal.
+    picked = []
+    for word in words:
+        name = _normalise(word, _DETAIL_SYNONYMS)
+        if name in config.DETAILS and name not in picked:
+            picked.append(name)
+    picked = picked[: config.MAX_DETAILS]
+    return [name for name in config.DETAILS if name in picked]
 
 
 def _is_empty_summary(text):
@@ -208,6 +254,11 @@ def _coerce(payload):
     else:
         subjects = None
 
+    details = _details(payload)
+    if subjects is not None:
+        implied = {_DETAIL_SUBJECT.get(name) for name in details}
+        subjects = [name for name in config.SUBJECTS if name in {*subjects, *implied}]
+
     count = payload.get("people_count")
     if isinstance(count, bool) or not isinstance(count, (int, float)):
         count = None
@@ -222,7 +273,16 @@ def _coerce(payload):
         elif count == 0 and "person" in subjects:
             count = None
 
-    return {"summary": summary, "subjects": subjects, "people_count": count}
+    night = payload.get("night")
+    return {
+        "summary": summary,
+        "subjects": subjects,
+        "details": details,
+        "people_count": count,
+        # Only a real boolean counts: "no" or 0 is the model not following the
+        # shape, and a guess here would mislabel the clip.
+        "night": night if isinstance(night, bool) else None,
+    }
 
 
 def parse_reply(text):
@@ -264,7 +324,13 @@ def parse_reply(text):
     # Prose, or JSON that carried no summary. Either way the sentence itself
     # is still the description, which is exactly what this used to return.
     _LOGGER.debug("vision reply was not the requested JSON; using it as prose")
-    return {"summary": text, "subjects": None, "people_count": None}
+    return {
+        "summary": text,
+        "subjects": None,
+        "details": [],
+        "people_count": None,
+        "night": None,
+    }
 
 
 def _encode(payload):
@@ -365,7 +431,8 @@ async def identify(session, images, gallery):
 async def describe(session, images):
     """Ask the vision model what is in the frames.
 
-    Returns `{"summary", "subjects", "people_count"}`, or None if the model
+    Returns `{"summary", "subjects", "details", "people_count", "night"}`, or
+    None if the model
     could not be reached or gave nothing back at all. `subjects` is None when
     the model did not report any, which is not the same as reporting none.
     """

@@ -1153,11 +1153,15 @@ class Monitor:
             event["subjects"] = reply["subjects"]
             event["subjects_from"] = "model"
             event["people_count"] = reply["people_count"]
+            event["details"] = reply["details"]
+            event["details_from"] = "model"
+            event["night"] = reply["night"]
         elif summary:
             # The model answered in prose. Its own words are still the best
             # evidence available, so read them the way the archive does.
             event["subjects"] = library.subjects_from_text(summary)
             event["subjects_from"] = "text"
+            library.infer_details(event)
 
         event["summary"] = summary
         event["state"] = "described" if summary else "no-description"

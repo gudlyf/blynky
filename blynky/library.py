@@ -120,6 +120,17 @@ def make_record(kind, camera, slug, stamp, **extra):
         # Whether subjects came from the model ("model") or were inferred from
         # the wording of an older description ("text").
         "subjects_from": None,
+        # Finer tags the model added, from config.DETAILS. None for anything
+        # described before it was asked for them.
+        "details": None,
+        # Whether details and night came from the model ("model") or were read
+        # out of the description's wording ("text"), like subjects_from.
+        "details_from": None,
+        # Whether the footage was dark or infrared, as the model judged it.
+        "night": None,
+        # Every tag, derived from subjects, details and who by tags_for(). Not
+        # stored: the sidecar keeps what it was derived from instead.
+        "tags": [],
         # How many times describing this has been attempted, so a clip the
         # model can never handle is not retried on every restart.
         "describe_attempts": 0,
@@ -163,10 +174,125 @@ def subjects_from_text(summary):
     return []
 
 
+# The words a description uses for each finer tag. Read out of descriptions
+# written before the model was asked for tags, so the whole archive can be
+# searched by them without describing anything again.
+_DETAIL_WORDS = {
+    "dog": r"dogs?|pupp(?:y|ies)",
+    "cat": r"cats?|kittens?",
+    "deer": r"deer|fawns?",
+    "bird": r"birds?|crows?|robins?|turkeys?|geese|goose|ducks|hawks?|pigeons?"
+    r"|sparrows?",
+    "bicycle": r"bicycles?|bikes?|cyclists?|bicyclists?",
+    # A courier, or something being dropped off - not a FedEx truck driving
+    # past on the road, which is no delivery to this house.
+    "delivery": r"(?:delivery|ups|fedex|usps|amazon|dhl)\s+"
+    r"(?:driver|person|worker|man|men|courier|uniform)s?"
+    r"|couriers?|mail\s?carriers?|mail(?:man|men)|delivering|delivers"
+    r"|(?:drops?|dropped|leaves|left|places?|placed|sets?)\s+(?:off\s+)?"
+    r"(?:a|an|the|two|several)\s+(?:\w+\s+)?(?:package|parcel|box)(?:e?s)?",
+}
+_DETAILS_IN_TEXT = {
+    name: re.compile(rf"\b(?:{words})\b", re.IGNORECASE)
+    for name, words in _DETAIL_WORDS.items()
+}
+_NIGHT_IN_TEXT = re.compile(
+    r"\b(?:night(?:time)?|infrared|night[- ]vision|black[- ]and[- ]white"
+    r"|gr[ae]yscale)\b",
+    re.IGNORECASE,
+)
+# "No people, animals, or deliveries appear" is how the model reports an empty
+# clip. A negating word earlier in the sentence cancels a match, unless a
+# "but" or "while" turns the sentence around in between.
+_NEGATION = re.compile(r"\b(?:no|nothing|without|not|neither|nor|none)\b", re.I)
+_TURN = re.compile(r"\bbut\b|\bwhile\b|\bthough\b|;", re.IGNORECASE)
+_SENTENCE = re.compile(r"[^.!?]+")
+
+
+def _negated(sentence, at):
+    """Whether a match at this offset sits in a negated part of the sentence."""
+    before = sentence[:at]
+    negation = max((m.end() for m in _NEGATION.finditer(before)), default=-1)
+    if negation < 0:
+        return False
+    return not any(m.start() > negation for m in _TURN.finditer(before))
+
+
+def details_from_text(summary):
+    """Guess the finer tags a description mentions, in config order."""
+    found = set()
+    for sentence in _SENTENCE.finditer(summary or ""):
+        text = sentence.group()
+        for name, pattern in _DETAILS_IN_TEXT.items():
+            if name not in found and any(
+                not _negated(text, match.start()) for match in pattern.finditer(text)
+            ):
+                found.add(name)
+    return [name for name in config.DETAILS if name in found]
+
+
+def infer_details(record):
+    """Fill in details and night from a record's description, marked as such.
+
+    Night is never negated: "nothing of note in this nighttime clip" is still
+    a night clip. Only ever True or unset - a description that does not say
+    it was dark is not evidence that it was light.
+    """
+    record["details"] = details_from_text(record["summary"])
+    record["details_from"] = "text"
+    if _NIGHT_IN_TEXT.search(record["summary"] or ""):
+        record["night"] = True
+
+
+def tag_for_name(name):
+    """Return the tag a known person's name is filed under."""
+    return slugify(name)
+
+
+def tags_for(record):
+    """Return a record's tags, without the leading #, in a stable order.
+
+    Subjects first, then the finer details, then the derived ones, then
+    whoever was recognised. All of them come from closed lists - the subjects
+    and details the model may pick from, a few fixed words, and the people
+    enrolled - so a tag search never has to guess at a word the model made up.
+    """
+    subjects = record.get("subjects") or ()
+    tags = [name for name in config.SUBJECTS if name in subjects]
+    if (record.get("people_count") or 0) > 1:
+        tags.append("group")
+    tags += [name for name in config.DETAILS if name in (record.get("details") or ())]
+    if record.get("night") is True:
+        tags.append("night")
+    who = record.get("who")
+    # An empty list, not None: identification was asked and found nobody it
+    # knew. None means it never ran - switched off, or nobody enrolled yet -
+    # and calling everyone a stranger then would only be noise.
+    if "person" in subjects and who == []:
+        tags.append("unknown")
+    for name in who or ():
+        tag = tag_for_name(name)
+        if tag and tag not in tags:
+            tags.append(tag)
+    return tags
+
+
+# Every field a sidecar leaves out: derived from the rest, or from the disk.
+_UNSTORED = {"bytes", "tags"}
+
+
 async def write_sidecar(record):
-    """Persist a record next to its media so a restart can find it again."""
+    """Persist a record next to its media so a restart can find it again.
+
+    Also refreshes the record's tags. Everything that changes what a record
+    is tagged with saves it straight after, so this is the one place that
+    cannot be missed - and it happens before the change is broadcast.
+    """
+    record["tags"] = tags_for(record)
     path = dir_for(record["kind"], record["slug"]) / f"{record['prefix']}.json"
-    payload = json.dumps({k: v for k, v in record.items() if k != "bytes"}, indent=1)
+    payload = json.dumps(
+        {k: v for k, v in record.items() if k not in _UNSTORED}, indent=1
+    )
     try:
         await asyncio.to_thread(_write_text, path, payload)
     except OSError as error:  # noqa: BLE001 - the media itself is already safe
@@ -338,6 +464,18 @@ def _record_from_parts(kind, slug, prefix, parts, names):
         # there is to go on, so say so rather than passing it off as observed.
         record["subjects"] = subjects_from_text(record["summary"])
         record["subjects_from"] = "text"
+    details = stored.get("details")
+    night = stored.get("night")
+    if isinstance(details, list) and stored.get("details_from") != "text":
+        record["details"] = details
+        record["details_from"] = "model"
+        record["night"] = night if isinstance(night, bool) else None
+    elif record["summary"]:
+        # Described before the model was asked for tags. Read from the wording
+        # on every load, even if a guess was saved since, so a better word
+        # list here reaches the whole archive on the next restart.
+        infer_details(record)
+    record["tags"] = tags_for(record)
 
     record["digest"] = stored.get("digest")
     record["bytes"] = sum(size for _, size in parts.values())
@@ -482,7 +620,7 @@ class Library:
         back to a given day without paging through everything since.
         """
         after = _decode_cursor(cursor)
-        needle = (search or "").strip().lower()
+        tags, needle = split_search(search)
         matches = []
         for record in self._records:
             if camera and record["slug"] != camera:
@@ -492,6 +630,8 @@ class Library:
             if subject and subject not in (record["subjects"] or ()):
                 continue
             if until and (parse_stamp(record["stamp"]) or _EPOCH) > until:
+                continue
+            if tags and not tags.issubset(record["tags"]):
                 continue
             if needle and needle not in (record["summary"] or "").lower():
                 if needle not in record["camera"].lower():
@@ -516,7 +656,10 @@ class Library:
         clips = sum(1 for record in self._records if record["clip"])
         stills = sum(1 for record in self._records if record["kind"] == STILL)
         per_camera = {}
+        tags = {}
         for record in self._records:
+            for tag in record["tags"]:
+                tags[tag] = tags.get(tag, 0) + 1
             entry = per_camera.setdefault(
                 record["slug"], {"slug": record["slug"], "camera": None, "count": 0}
             )
@@ -533,7 +676,25 @@ class Library:
             "oldest": self._records[-1]["stamp"] if self._records else None,
             "newest": self._records[0]["stamp"] if self._records else None,
             "cameras": sorted(per_camera.values(), key=lambda e: e["camera"] or ""),
+            # Most used first, for suggesting tags as someone types.
+            "tags": dict(sorted(tags.items(), key=lambda item: (-item[1], item[0]))),
         }
+
+
+def split_search(search):
+    """Split a search into the #tags it names and the text that is left.
+
+    "#dog #delivery front door" is every capture tagged both dog and delivery
+    whose description or camera mentions "front door".
+    """
+    tags, words = set(), []
+    for word in (search or "").lower().split():
+        if word.startswith("#"):
+            if word[1:]:
+                tags.add(word[1:])
+        else:
+            words.append(word)
+    return tags, " ".join(words)
 
 
 def _sort_key(record):

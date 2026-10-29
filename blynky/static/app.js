@@ -490,6 +490,63 @@ function describe(text) {
   return parts;
 }
 
+// A record's tags as chips. `names` is false where the row already leads
+// with who was recognised, so the name is not said twice. With `onPick`, each
+// chip is a button that filters by its tag; without, it is just a label,
+// because the row it sits in is already the thing to click.
+function tagChips(record, { names = true, onPick = null } = {}) {
+  const box = document.createElement("span");
+  box.className = "tags";
+  const people = new Set((record.who || []).map(tagForName));
+  for (const tag of record.tags || []) {
+    const person = people.has(tag);
+    if (person && !names) continue;
+    const chip = document.createElement(onPick ? "button" : "span");
+    chip.className = person ? "tag person" : "tag";
+    if (person && record.who_confidence !== "confirmed") {
+      chip.classList.add("guess");
+      chip.title = "Recognised by the model - a guess, not a certainty";
+    }
+    chip.textContent = `#${tag}`;
+    if (onPick) {
+      chip.type = "button";
+      chip.title = chip.title || `Show everything tagged #${tag}`;
+      chip.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onPick(tag);
+      });
+    }
+    box.append(chip);
+  }
+  return box.childElementCount ? box : null;
+}
+
+// The same slug the server files a name's tag under: lowercase, and anything
+// that is not a letter or digit collapsed to a hyphen.
+function tagForName(name) {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// "#dog #delivery front door": the tags it names, and the text left over.
+// Mirrors library.split_search on the server.
+function splitSearch(q) {
+  const tags = [];
+  const words = [];
+  for (const word of (q || "").toLowerCase().split(/\s+/).filter(Boolean)) {
+    if (word.startsWith("#")) {
+      if (word.length > 1) tags.push(word.slice(1));
+    } else {
+      words.push(word);
+    }
+  }
+  return { tags, text: words.join(" ") };
+}
+
 // Rows and tiles are list items rather than buttons, so they are given the
 // keyboard behaviour of one.
 function activatable(node, open) {
@@ -570,7 +627,17 @@ function timelineRow(record, withCamera, open, burst) {
   }
   if (record.summary) text.append(...describe(record.summary));
   else text.append(describing ? "Describing…" : "No description");
-  row.append(text);
+  // Under the text rather than in it: the text is clamped to two lines and
+  // would cut them off. One cell either way, so the row's grid is unchanged.
+  const chips = tagChips(record, { names: false });
+  if (chips) {
+    const body = document.createElement("span");
+    body.className = "tl-body";
+    body.append(text, chips);
+    row.append(body);
+  } else {
+    row.append(text);
+  }
 
   if (burst) {
     row.dataset.burst = burst.key;
@@ -994,6 +1061,16 @@ async function loadStats() {
     }
     select.value = chosen;
 
+    // Every tag in use, most used first, offered as the search is typed.
+    el("tag-suggestions").replaceChildren(
+      ...Object.entries(stats.tags || {}).map(([tag, count]) => {
+        const option = document.createElement("option");
+        option.value = `#${tag}`;
+        option.label = `${count} saved`;
+        return option;
+      }),
+    );
+
     // The date picker cannot usefully offer days outside the archive.
     const until = el("filter-until");
     until.min = stats.oldest ? localDate(stats.oldest) : "";
@@ -1133,6 +1210,9 @@ function libraryTile(record) {
     record.summary ||
     (record.state === "describing" ? "Describing…" : "No description");
   foot.append(name, text);
+  // Always a row, empty or not, so every tile stays the same height.
+  const chips = tagChips(record, { names: false, onPick: toggleTag });
+  foot.append(chips || Object.assign(document.createElement("span"), { className: "tags" }));
 
   tile.append(thumb, foot);
   // Looked up rather than baked in: a capture arriving live is inserted at the
@@ -1229,6 +1309,20 @@ function clearFilters() {
   reloadLibrary();
 }
 
+// Add a tag to the search, or take it back out if it is already there.
+// `only` keeps it rather than toggling it off, for a chip picked in the
+// viewer, where the point is always "show me more like this".
+function toggleTag(tag, only = false) {
+  const input = el("filter-search");
+  const words = input.value.split(/\s+/).filter(Boolean);
+  const term = `#${tag}`;
+  const at = words.findIndex((word) => word.toLowerCase() === term);
+  if (at >= 0 && !only) words.splice(at, 1);
+  else if (at < 0) words.push(term);
+  input.value = words.join(" ");
+  applyFilters();
+}
+
 // ------------------------------------------------------------------- viewer
 
 function openViewer(index) {
@@ -1274,6 +1368,16 @@ function openViewer(index) {
   summary.className = record.summary ? "viewer-summary" : "viewer-summary empty";
   if (record.summary) summary.replaceChildren(...describe(record.summary));
   else summary.textContent = "No description for this capture.";
+
+  const tags = el("viewer-tags");
+  const chips = tagChips(record, {
+    onPick: (tag) => {
+      closeViewerNow();
+      toggleTag(tag, true);
+    },
+  });
+  tags.replaceChildren(...(chips ? [chips] : []));
+  tags.hidden = !chips;
 
   renderWho(record);
 
@@ -2183,9 +2287,10 @@ function matchesFilters(record) {
   if (subject && !(record.subjects || []).includes(subject)) return false;
   if (until && new Date(record.stamp) > new Date(endOfDay(until))) return false;
   if (q) {
-    const needle = q.toLowerCase();
+    const { tags, text } = splitSearch(q);
+    if (tags.some((tag) => !(record.tags || []).includes(tag))) return false;
     const summary = (record.summary || "").toLowerCase();
-    if (!summary.includes(needle) && !record.camera.toLowerCase().includes(needle)) {
+    if (text && !summary.includes(text) && !record.camera.toLowerCase().includes(text)) {
       return false;
     }
   }
