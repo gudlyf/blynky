@@ -147,8 +147,10 @@ async def snap(request):
     except ValueError:
         raise web.HTTPBadRequest(reason="expected JSON") from None
 
-    camera = (body.get("camera") or "").strip()
-    if not camera:
+    # Do not strip trailing/leading spaces from camera name; some Blink
+    # camera names legitimately end or start with whitespace.
+    camera = body.get("camera")
+    if not camera or not str(camera).strip():
         return web.json_response({"status": "error", "message": "No camera named."})
 
     result = await request.app["monitor"].snap(camera)
