@@ -472,7 +472,9 @@ nothing to be recognised by, so name it once in `.env`:
 CAMERA_RENAMES=Old Front Door=Front Door
 ```
 
-It is safe to leave in place afterwards.
+It is safe to leave in place afterwards. Spaces around each name are trimmed,
+so a name that starts or ends with a space in Blink will not match. Remove the
+stray space in the Blink app first.
 
 ### Adding, removing or replacing a camera
 
