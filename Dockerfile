@@ -23,15 +23,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Works out which Blynky this is - the nearest tag and the short commit - for
-# the settings menu and bug reports. Its own stage so that a new commit, which
-# changes .git, rebuilds only this and the one COPY that uses it. The [t] makes
-# .git optional: a tarball with no history still builds, as "unknown".
+# Records the short commit this is built from, for the settings menu and bug
+# reports; the version itself comes from pyproject.toml. Its own stage so
+# that a new commit, which changes .git, rebuilds only this and the one COPY
+# that uses it. The [t] makes .git optional: a tarball with no history still
+# builds, with no commit.
 FROM base AS version
 COPY .gi[t] /src/blynky.git
-RUN export GIT_DIR=/src/blynky.git \
-    && { git describe --tags --always 2>/dev/null || echo unknown; \
-         git rev-parse --short HEAD 2>/dev/null || echo; } > /BUILD
+RUN { GIT_DIR=/src/blynky.git git rev-parse --short HEAD 2>/dev/null || true; } > /BUILD
 
 
 FROM base AS build
