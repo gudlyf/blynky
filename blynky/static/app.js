@@ -2422,6 +2422,8 @@ function reconnectNow() {
 // The view is mirrored in the address - #/, #/camera/<slug>, #/library with
 // its filters - so Back and Forward move between views, a reload lands where
 // it was, and a camera or a filtered search can be bookmarked or sent on.
+// #/event/<id> is only ever arrived at, from a notification: it opens that
+// capture and is replaced by the library view it opens in.
 const route = {
   applying: false,  // replaying history; do not write it back
   pending: null,    // a camera route waiting for the camera list to arrive
@@ -2461,6 +2463,9 @@ function parseRoute(hash) {
   if (parts[0] === "camera" && parts[1]) {
     return { view: "camera", slug: decodeURIComponent(parts[1]) };
   }
+  if (parts[0] === "event" && parts[1]) {
+    return { view: "event", id: decodeURIComponent(parts[1]) };
+  }
   return { view: "home" };
 }
 
@@ -2494,6 +2499,8 @@ function applyRoute(target, historyState) {
         else lib.stale = true;
       }
       if (!lib.open) openLibrary();
+    } else if (target.view === "event") {
+      openEvent(target.id);
     } else if (target.view === "camera") {
       const camera = [...state.cameras.values()].find((c) => c.slug === target.slug);
       if (camera) {
@@ -2515,6 +2522,42 @@ function applyRoute(target, historyState) {
   } finally {
     route.applying = false;
   }
+}
+
+// Open one capture from a link. It is shown in the library narrowed to its
+// camera and day, which puts it on the first page or close to it, so Next and
+// Previous step through what that camera saw around it. The link's own entry
+// becomes the home view first: Back then leaves the library, rather than
+// landing on the link and opening the capture all over again.
+async function openEvent(id) {
+  let record = null;
+  try {
+    const response = await fetch(`/api/library/event/${encodeURIComponent(id)}`);
+    if (response.ok) record = await response.json();
+    else if (response.status !== 404) throw new Error(response.statusText);
+  } catch (err) {
+    history.replaceState(null, "", "#/");
+    showMessage("Could not open that capture", "The server is unreachable.");
+    return;
+  }
+  history.replaceState(null, "", "#/");
+  if (!record) {
+    showMessage("Capture not found", "It is no longer in the archive.");
+    return;
+  }
+
+  await openLibraryWith({ camera: record.slug, until: localDate(record.stamp) });
+  // Anything that camera caught later the same day comes first. Page down to
+  // it, giving up if the filters change underneath or a page brings nothing.
+  const generation = lib.generation;
+  let index = lib.items.findIndex((item) => item.id === id);
+  while (index < 0 && lib.next && generation === lib.generation) {
+    const loaded = lib.items.length;
+    await loadLibraryPage();
+    if (lib.items.length === loaded) break;
+    index = lib.items.findIndex((item) => item.id === id);
+  }
+  if (index >= 0 && generation === lib.generation) openViewer(index);
 }
 
 window.addEventListener("popstate", (e) => {

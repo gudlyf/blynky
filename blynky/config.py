@@ -186,6 +186,16 @@ IDENTIFY_PROMPT = (
 # machine until a topic is named.
 NTFY_URL = os.environ.get("NTFY_URL", "").strip()
 
+# Where this server is reached from a phone, such as https://blynky.home.lan
+# or http://192.168.1.20:8080. Set, tapping a notification opens the capture it
+# is about. Blynky has no login of its own, so this should be an address only
+# you can reach - a LAN, a VPN or a tailnet - and never a port open to the
+# internet. It also travels inside every notification, so anyone subscribed to
+# the topic sees it.
+BLYNKY_URL = os.environ.get("BLYNKY_URL", "").strip().rstrip("/")
+if BLYNKY_URL and not BLYNKY_URL.startswith(("http://", "https://")):
+    raise ValueError("BLYNKY_URL must start with http:// or https://")
+
 # Which subjects are worth a notification. People, by default: animals,
 # vehicles and weather are most of what these cameras see, and alerting on
 # them is how notifications end up muted.

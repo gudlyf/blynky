@@ -103,6 +103,7 @@ Keep two more things in mind:
 
 - **The credentials file.** `.blink_creds.json` holds your Blink password in plain text next to the tokens, because blinkpy stores it that way. Blynky makes it readable only by you (`chmod 600`), and `.gitignore` and `.dockerignore` both exclude it.
 - **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. Use a long, random topic name or a self-hosted ntfy server.
+- **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet: the link goes to a server with no login. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
 
 ## Configuration
 
@@ -156,6 +157,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `NTFY_SUBJECTS` | `person` | Subjects that trigger an alert: `person`, `animal`, `vehicle`, `package` |
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |
 | `NTFY_COOLDOWN` | `120` | Seconds before the same camera may alert again |
+| `BLYNKY_URL` | unset | Address your phone reaches Blynky at, such as `https://blynky.your-tailnet.ts.net`. When set, tapping a notification opens that capture. See [Security](#security) |
 | `IDENTIFY` | `1` | Guess who a person is, once people have been tagged |
 | `IDENTIFY_MIN_CONFIDENCE` | `high` | Least confidence that counts as a match (`low`, `medium`, `high`) |
 | `MAX_REFERENCES` | `5` | Reference frames kept per person |

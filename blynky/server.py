@@ -194,6 +194,14 @@ async def archive(request):
     return web.json_response(page)
 
 
+async def archive_event(request):
+    """Return one capture by id, for a link straight to it."""
+    record = request.app["monitor"].library.find(request.match_info["event_id"])
+    if record is None:
+        raise web.HTTPNotFound(reason="unknown capture")
+    return web.json_response(record)
+
+
 async def archive_stats(request):
     """Return archive totals and the cameras that appear in it."""
     return web.json_response(request.app["monitor"].library.stats())
@@ -392,6 +400,7 @@ def create_app(monitor):
     app.router.add_post("/api/snap", snap)
     app.router.add_get("/api/library", archive)
     app.router.add_get("/api/library/stats", archive_stats)
+    app.router.add_get("/api/library/event/{event_id}", archive_event)
     app.router.add_get("/api/people", known_people)
     app.router.add_post("/api/people", enroll)
     app.router.add_delete("/api/people/{slug}", forget_person)
