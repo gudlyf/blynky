@@ -364,6 +364,36 @@ somewhere ntfy could fetch an attachment from. Note that an ntfy.sh topic is
 readable by anyone who knows its name, and these messages say who is at the
 house and when.
 
+### Opening the capture from a notification
+
+Set `BLYNKY_URL` to the address your phone reaches Blynky at, and tapping a
+notification opens the capture it is about:
+
+```
+BLYNKY_URL=https://blynky.your-tailnet.ts.net
+```
+
+Use the whole address, including `https://` or `http://` and a port if it
+needs one, and nothing after it. Blynky adds `/#/event/<id>` itself. The
+capture opens in the library, narrowed to its camera and day, so Next and
+Previous step through what that camera saw around it. A capture that has
+since been deleted shows a short message instead. Empty, the default, sends
+no link.
+
+Two things to settle before setting it:
+
+- **Point it somewhere only you can reach.** The link opens a server with no
+  login, so it should be a tailnet name from `tailscale serve`, a VPN address
+  or a LAN address, and never a port forward or `tailscale funnel` (see
+  [Reaching it from other devices](#reaching-it-from-other-devices)). The link
+  only works where the phone can reach that address: a LAN address won't open
+  while you're away from home, while a tailnet name works wherever the phone
+  is on Tailscale.
+- **The address travels in every notification.** Anyone who can read the
+  topic sees it. A private tailnet name or LAN address tells a stranger little
+  they could use, but it is one more reason to keep the topic name long and
+  random, or the ntfy server your own.
+
 ## Known people
 
 Open a capture in the library, and if it has a person in it the viewer asks

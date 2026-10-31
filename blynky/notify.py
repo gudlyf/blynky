@@ -12,6 +12,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from aiohttp import ClientTimeout
 
@@ -159,6 +160,13 @@ def _all_tags(event, subjects, known):
     return ",".join(tags)
 
 
+def _click(event):
+    """Return the address that opens this capture in Blynky, or None."""
+    if not config.BLYNKY_URL or not event.get("id"):
+        return None
+    return f"{config.BLYNKY_URL}/#/event/{quote(event['id'], safe='')}"
+
+
 def should_send(event):
     """Say whether this event is one to push, and why not when it is not."""
     if not config.NTFY_URL:
@@ -203,6 +211,10 @@ async def send(session, event, image=None):
         "Tags": _all_tags(event, subjects, known),
         "Priority": str(config.NTFY_KNOWN_PRIORITY if known else config.NTFY_PRIORITY),
     }
+    click = _click(event)
+    if click:
+        # What opens when the notification is tapped.
+        headers["Click"] = click
     summary = event.get("summary") or "Motion detected."
     if known:
         # Hedged on purpose. The model is matching build and clothing on a
