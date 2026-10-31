@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import platform
+import re
 import shutil
 import subprocess
 from functools import cache
@@ -56,22 +57,36 @@ def _git(*args):
     return result.stdout.strip() or None
 
 
-@cache
-def build_info():
-    """Return the running version (nearest tag) and short commit hash.
+def _project_version():
+    """Return the version pyproject.toml declares, or None without one.
 
-    From the file the image bakes in, else from git when running from a
-    checkout, else the package version with no commit.
+    Read from the file beside the code rather than the installed metadata,
+    which is only as new as the last install.
     """
     try:
-        version, commit = BUILD_FILE.read_text().splitlines()[:2]
-    except (OSError, ValueError):
-        version = _git("describe", "--tags", "--always", "--dirty")
-        commit = _git("rev-parse", "--short", "HEAD")
-    else:
-        version = version if version != "unknown" else None
+        text = (PACKAGE_DIR.parent / "pyproject.toml").read_text()
+    except OSError:
+        return None
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+@cache
+def build_info():
+    """Return the running version and the commit it was built from.
+
+    The version is what pyproject.toml says, so a build of unreleased code
+    already shows the number it will be released as. The commit pins it down
+    exactly: from the file the image bakes in, else from git when running from
+    a checkout, marked -dirty when that checkout has uncommitted changes.
+    """
+    try:
+        commit = BUILD_FILE.read_text().strip()
+    except OSError:
+        # --exclude='*' ignores every tag, leaving just the hash and -dirty.
+        commit = _git("describe", "--always", "--dirty", "--exclude=*")
     return {
-        "version": version or _version("blynky"),
+        "version": _project_version() or _version("blynky"),
         "commit": commit or None,
     }
 

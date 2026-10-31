@@ -80,9 +80,9 @@ only*.
   includes camera names, addresses or account details, and nothing is sent
   until you submit the issue on GitHub.
 
-The bottom of the menu shows which Blynky is running: the release tag and the
-short commit, such as `v0.1.1 · 72ef0a5`. A build made after a tag shows
-`git describe`'s form instead, `v0.1.1-3-gabc1234`.
+The bottom of the menu shows which Blynky is running: the version in
+`pyproject.toml` and the commit it was built from, such as `v0.1.4 · ab4e71c`.
+Run from a checkout with uncommitted changes, the commit ends in `-dirty`.
 
 Desktop alerts and keeping the screen awake need a secure context: they are
 offered on `http://127.0.0.1` or over HTTPS (`tailscale serve`, a reverse

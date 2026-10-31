@@ -2827,7 +2827,7 @@ async function refreshBugLink() {
   // Same request, so the menu's footer says which build is running too.
   if (info.version) {
     el("app-version").textContent =
-      `Blynky ${info.version}${info.commit ? ` · ${info.commit}` : ""}`;
+      `Blynky v${info.version}${info.commit ? ` · ${info.commit}` : ""}`;
   }
 }
 
