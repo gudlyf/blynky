@@ -2324,6 +2324,12 @@ function connect() {
       return;
     }
 
+    if (data.type === "backfill") {
+      Object.assign(backfill, data.backfill);
+      renderBackfill();
+      return;
+    }
+
     if (data.type === "ntfy") {
       state.ntfy = data.ntfy;
       renderNtfy();
@@ -2345,6 +2351,8 @@ function connect() {
       state.feeds.clear();
       if (state.peopleOnly) loadTimelineFeed("");
       lib.stale = true;
+      // So is the end of a describe run, which would leave its button stuck.
+      if (lib.open) refreshBackfill();
       applyStatus(data.status, data.message);
       renderGrid();
       renderTimeline();

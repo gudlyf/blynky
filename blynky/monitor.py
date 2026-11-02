@@ -1036,13 +1036,20 @@ class Monitor:
 
         return fetch
 
-    def backfill_status(self):
-        """Return what the description backlog looks like right now."""
+    def backfill_status(self, running=None):
+        """Return what the description backlog looks like right now.
+
+        `running` overrides the task's own state, for the run reporting its
+        end from inside itself, before its task counts as done.
+        """
         pending = self.library.needing_description(config.DESCRIBE_ATTEMPTS)
-        return {
-            "pending": len(pending),
-            "running": self._backfill is not None and not self._backfill.done(),
-        }
+        if running is None:
+            running = self._backfill is not None and not self._backfill.done()
+        return {"pending": len(pending), "running": running}
+
+    def _broadcast_backfill(self, running=None):
+        """Tell every browser how the backlog stands, so the button keeps up."""
+        self._broadcast({"type": "backfill", "backfill": self.backfill_status(running)})
 
     def start_backfill(self):
         """Begin describing saved clips that have none. Returns the status."""
@@ -1051,6 +1058,7 @@ class Monitor:
             return status
         self._backfill = asyncio.create_task(self._run_backfill())
         status["running"] = True
+        self._broadcast_backfill(running=True)
         return status
 
     def start_thumbnails(self):
@@ -1092,21 +1100,29 @@ class Monitor:
         _LOGGER.info("backfill: %d saved clips have no description", len(pending))
         done = 0
 
-        for record in pending:
-            # The list was taken once; by now a run may have been asked to
-            # stop, or the same event described by something else.
-            if self._closing or record["summary"]:
-                break
-            try:
-                if await self._redescribe(record):
-                    done += 1
-            except asyncio.CancelledError:
-                raise
-            except Exception as error:  # noqa: BLE001 - one bad clip is not fatal
-                _LOGGER.exception("backfill of %s failed: %s", record["id"], error)
-            # Live motion and the snapshot button share the model. Yield
-            # between clips so a long backlog cannot monopolise it.
-            await asyncio.sleep(config.BACKFILL_PAUSE)
+        try:
+            for record in pending:
+                # The list was taken once; by now a run may have been asked
+                # to stop, or this event described by something else.
+                if self._closing:
+                    break
+                if record["summary"]:
+                    continue
+                try:
+                    if await self._redescribe(record):
+                        done += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:  # noqa: BLE001 - one bad clip is not fatal
+                    _LOGGER.exception("backfill of %s failed: %s", record["id"], error)
+                # The count on the button goes down as the run goes.
+                self._broadcast_backfill(running=True)
+                # Live motion and the snapshot button share the model. Yield
+                # between clips so a long backlog cannot monopolise it.
+                await asyncio.sleep(config.BACKFILL_PAUSE)
+        finally:
+            # However it ended, the button has to come back.
+            self._broadcast_backfill(running=False)
 
         _LOGGER.info("backfill: described %d of %d", done, len(pending))
 
