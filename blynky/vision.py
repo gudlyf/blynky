@@ -285,6 +285,33 @@ def _coerce(payload):
     }
 
 
+def _json_in(text):
+    """Yield each JSON value a reply might be carrying: fenced, then bare."""
+    candidates = []
+    fenced = _FENCE.search(text)
+    if fenced:
+        candidates.append(fenced.group(1))
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start:
+        candidates.append(text[start : end + 1])
+    for candidate in candidates:
+        try:
+            yield json.loads(candidate)
+        except ValueError:
+            continue
+
+
+def says_nothing(text):
+    """Whether a reply, as prose or as JSON, says nothing of note happened."""
+    text = (text or "").strip()
+    if _is_empty_summary(text):
+        return True
+    return any(
+        isinstance(parsed, dict) and _is_empty_summary(parsed.get("summary") or "")
+        for parsed in _json_in(text)
+    )
+
+
 def parse_reply(text):
     """Read a model reply, however it chose to answer. Returns a result dict.
 
@@ -297,20 +324,8 @@ def parse_reply(text):
     if not text or _is_empty_summary(text):
         return None
 
-    candidates = []
-    fenced = _FENCE.search(text)
-    if fenced:
-        candidates.append(fenced.group(1))
-    start, end = text.find("{"), text.rfind("}")
-    if start >= 0 and end > start:
-        candidates.append(text[start : end + 1])
-
     saw_empty_summary = False
-    for candidate in candidates:
-        try:
-            parsed = json.loads(candidate)
-        except ValueError:
-            continue
+    for parsed in _json_in(text):
         if isinstance(parsed, dict) and _is_empty_summary(parsed.get("summary") or ""):
             saw_empty_summary = True
             continue
@@ -463,14 +478,22 @@ async def describe(session, images):
         reply = parse_reply(raw_content)
         if reply:
             return reply
-        if _is_empty_summary(raw_content or ""):
+        if says_nothing(raw_content):
+            # The answer the prompt asks for when the clip shows nothing, as
+            # JSON as often as not, so the raw text cannot be checked alone.
+            _LOGGER.debug("vision model saw nothing of note")
             return None
-        # A reasoning model that burns its whole budget thinking returns an
-        # empty content field rather than an error.
-        _LOGGER.error(
-            "vision model returned no text (finish_reason=%s) - raise MAX_TOKENS",
-            choice.get("finish_reason"),
-        )
+        finish = choice.get("finish_reason")
+        if finish == "length":
+            # A reasoning model that spends its whole budget thinking returns
+            # an empty content field rather than an error.
+            _LOGGER.error("vision model ran out of tokens - raise MAX_TOKENS")
+        else:
+            _LOGGER.error(
+                "vision model returned no usable reply (finish_reason=%s): %r",
+                finish,
+                (raw_content or "")[:200],
+            )
     except (KeyError, IndexError, ValueError) as error:
         _LOGGER.error("could not parse vision response: %s", error)
     except Exception as error:  # noqa: BLE001 - never kill the poll loop
