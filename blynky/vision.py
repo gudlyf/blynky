@@ -470,3 +470,78 @@ async def describe(session, images):
     except Exception as error:  # noqa: BLE001 - never kill the poll loop
         _LOGGER.error("vision request failed: %s", error)
     return None
+
+
+def parse_digest(text):
+    """Read a daily summary reply into plain text, or None if it is empty.
+
+    Asked for prose, a model will still sometimes fence it, quote it, or
+    answer in the JSON shape the clip descriptions use. All of those are the
+    summary with packaging around it.
+    """
+    text = (text or "").strip()
+    fenced = _FENCE.search(text)
+    if fenced:
+        text = fenced.group(1).strip()
+    for parsed in _json_in(text):
+        if isinstance(parsed, dict) and isinstance(parsed.get("summary"), str):
+            text = parsed["summary"].strip()
+            break
+    if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    return text or None
+
+
+async def summarize_day(session, camera, day, lines):
+    """Ask the model for a short account of one camera's day.
+
+    `day` is a date, `lines` the day's descriptions as "HH:MM text", oldest
+    first. Returns the summary text, or None if the model could not be reached
+    or gave nothing back. Text only: no frames are sent.
+    """
+    if not lines:
+        return None
+
+    heading = (
+        f"Camera: {camera}\n"
+        f"Date: {day.strftime('%A, %B')} {day.day}, {day.year}\n"
+        f"Descriptions of the {len(lines)} motion clips it recorded, in order:\n"
+    )
+    body = {
+        "model": _MODEL,
+        "max_tokens": config.MAX_TOKENS,
+        "messages": [
+            {"role": "system", "content": config.DAILY_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": heading + "\n".join(lines) + "\n\n" + config.DAILY_PROMPT,
+            },
+        ],
+    }
+
+    response, text = await _post_chat(
+        session, _ENDPOINT, _HEADERS, body, timeout=config.VISION_TIMEOUT
+    )
+    if response is None or response.status != 200 or not text:
+        return None
+
+    try:
+        choice = json.loads(text)["choices"][0]
+        raw_content = choice["message"].get("content")
+        digest = parse_digest(raw_content)
+        if digest:
+            return digest
+        finish = choice.get("finish_reason")
+        if finish == "length":
+            _LOGGER.error("daily summary ran out of tokens - raise MAX_TOKENS")
+        else:
+            _LOGGER.error(
+                "model returned no daily summary (finish_reason=%s): %r",
+                finish,
+                (raw_content or "")[:200],
+            )
+    except (KeyError, IndexError, ValueError) as error:
+        _LOGGER.error("could not parse daily summary response: %s", error)
+    except Exception as error:  # noqa: BLE001 - never kill the caller's loop
+        _LOGGER.error("daily summary request failed: %s", error)
+    return None

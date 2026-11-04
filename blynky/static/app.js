@@ -30,6 +30,23 @@ const backfill = { pending: 0, running: false };
 // or that the sync module was too busy to answer - never sees it at all.
 const sync = { running: false, found: 0, saved: 0, at: null };
 
+// Whether the server writes a summary of each camera's day, and how far a
+// backfill of past days has got. The server's setting, shared by everyone.
+const daily = {
+  enabled: false,
+  ntfy: false,    // whether the server has an ntfy topic to send to
+  notify: false,  // whether each night's summaries are pushed there
+  running: false,
+  done: 0,
+  total: 0,
+  pending: 0,   // past days with descriptions and no summary
+  clips: 0,     // descriptions those days hold
+  tokens: 0,    // the server's rough estimate of what sending them costs
+};
+
+// The days listed under the camera on screen, newest first.
+const days = { slug: null, list: [], more: false, loading: false, busy: new Set() };
+
 // The library view is a separate, paged read of everything on disk. It keeps
 // its own list because the live feed above is only ever the recent tail.
 const NO_FILTERS = { camera: "", kind: "", subject: "", q: "", until: "" };
@@ -337,6 +354,7 @@ function isolate(name, event, live) {
 
   renderDetailTools();
   renderSummary(shown, camera);
+  showDays(camera.slug);
 
   // Which row to mark as the one on screen, and the rows themselves.
   state.shownId = shown ? shown.id : null;
@@ -1152,12 +1170,14 @@ function appendLibrary(records) {
       const heading = document.createElement("h3");
       heading.className = "day";
       heading.textContent = dayLabel(record.stamp);
+      heading.dataset.date = localDate(record.stamp);
       grid.append(heading);
     }
     lib.items.push(record);
     grid.append(libraryTile(record));
     previous = record;
   }
+  addDaySummaries();
   el("library-empty").hidden = lib.items.length > 0;
   el("library-empty").textContent = hasFilters()
     ? "Nothing matches these filters."
@@ -1238,12 +1258,16 @@ function prependLibrary(record) {
 
   const tile = libraryTile(record);
   if (dayKey(record.stamp) === dayKey(first.stamp)) {
-    // Today's heading is already there; the tile goes directly under it.
-    grid.insertBefore(tile, grid.children[1] || null);
+    // The day's heading is already there, and maybe its summary; the tile
+    // goes directly under them.
+    let after = grid.children[1] || null;
+    if (after && after.classList.contains("day-summary")) after = after.nextSibling;
+    grid.insertBefore(tile, after);
   } else {
     const heading = document.createElement("h3");
     heading.className = "day";
     heading.textContent = dayLabel(record.stamp);
+    heading.dataset.date = localDate(record.stamp);
     grid.prepend(tile);
     grid.prepend(heading);
   }
@@ -2336,10 +2360,26 @@ function connect() {
       return;
     }
 
+    if (data.type === "daily") {
+      Object.assign(daily, data.daily);
+      renderDaily();
+      return;
+    }
+
+    if (data.type === "day") {
+      mergeDay(data.slug, data.day);
+      return;
+    }
+
     if (data.type === "state") {
       state.ntfy = data.ntfy || null;
       renderNtfy();
+      if (data.daily) Object.assign(daily, data.daily);
+      // Summaries written while the socket was down reached nobody.
+      days.slug = null;
+      renderDaily();
       state.cameras = new Map(data.cameras.map((c) => [c.name, c]));
+      state.model = data.model || null;
       state.lastPoll = data.last_poll;
       state.pollSeconds = data.poll_seconds || 60;
       state.pageSize = data.page_size || state.pageSize;
@@ -2689,6 +2729,7 @@ function setupSettings() {
   }
 
   setupNtfy();
+  setupDaily();
   el("open-people").addEventListener("click", openPeople);
   el("open-help").addEventListener("click", openHelp);
   el("report-bug").addEventListener("click", hideMenu);
@@ -2772,6 +2813,300 @@ function renderNtfy() {
       state.ntfy = { ...info, paused: false, until: null };
       renderNtfy();
     }, Math.max(0, left) + 1000);
+  }
+}
+
+// --------------------------------------------------------- daily summaries
+
+function setupDaily() {
+  const box = el("daily-on");
+  box.addEventListener("change", () => setDaily(box, { enabled: box.checked }));
+  const send = el("daily-notify");
+  send.addEventListener("change", () => setDaily(send, { notify: send.checked }));
+
+  el("daily-backfill").addEventListener("click", askDailyBackfill);
+  el("daily-cancel").addEventListener("click", cancelDailyBackfill);
+  const dialog = el("daily-dialog");
+  dialog.addEventListener("close", () => {
+    rehomeToasts();
+    if (dialog.returnValue === "ok") startDailyBackfill();
+  });
+  el("daily-more").addEventListener("click", () => loadDays(days.slug, true));
+}
+
+async function setDaily(box, payload) {
+  box.disabled = true;
+  try {
+    const response = await fetch("/api/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    Object.assign(daily, await response.json());
+  } catch (err) {
+    showMessage("Could not change daily summaries", "The server is unreachable.");
+  } finally {
+    box.disabled = false;
+    if ("enabled" in payload) days.slug = null;
+    // Puts the switch back where the server says it is if the request failed.
+    renderDaily();
+  }
+}
+
+function plural(count, word) {
+  return `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
+}
+
+function renderDaily() {
+  el("daily-on").checked = daily.enabled;
+  el("daily-notify-row").hidden = !(daily.enabled && daily.ntfy);
+  el("daily-notify").checked = daily.notify;
+  const note = el("daily-note");
+  const backfillButton = el("daily-backfill");
+  const cancel = el("daily-cancel");
+  const pill = el("daily-running");
+
+  if (daily.running) {
+    note.textContent = `Summarizing day ${Math.min(daily.done + 1, daily.total)} of ${daily.total}…`;
+  } else if (!daily.enabled) {
+    note.textContent = "Sends each camera's descriptions to the model once a day.";
+  } else if (daily.pending) {
+    note.textContent = `${plural(daily.pending, "past day")} without one.`;
+  } else {
+    note.textContent = "Yesterday's are written after midnight.";
+  }
+  backfillButton.hidden = !(daily.enabled && !daily.running && daily.pending);
+  backfillButton.textContent = `Summarize ${plural(daily.pending, "past day")}…`;
+  cancel.hidden = !daily.running;
+  el("daily-actions").hidden = backfillButton.hidden && cancel.hidden;
+  pill.hidden = !daily.running;
+  el("daily-running-label").textContent = `Summarizing ${daily.done}/${daily.total}`;
+
+  el("detail-daily").hidden = !daily.enabled;
+  if (daily.enabled) addDaySummaries();
+  else removeDaySummaries();
+  if (state.selected) {
+    const camera = state.cameras.get(state.selected);
+    if (camera) showDays(camera.slug);
+  }
+}
+
+// The warning comes first, every time: a long archive is a lot of requests.
+function askDailyBackfill() {
+  hideMenu();
+  const tokens = daily.tokens >= 1000
+    ? `${Math.round(daily.tokens / 1000).toLocaleString()}k`
+    : daily.tokens.toLocaleString();
+  el("daily-warning").textContent =
+    `This sends ${plural(daily.clips, "clip description")} from ` +
+    `${plural(daily.pending, "day")} to ${state.model || "the model"}: ` +
+    `${plural(daily.pending, "request")}, roughly ${tokens} tokens in, ` +
+    "plus each reply.";
+  const dialog = el("daily-dialog");
+  dialog.returnValue = "";
+  showModal(dialog);
+}
+
+async function startDailyBackfill() {
+  try {
+    const response = await fetch("/api/daily/backfill", { method: "POST" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    Object.assign(daily, await response.json());
+  } catch (err) {
+    showMessage("Could not start the summaries", "The server is unreachable.");
+  }
+  renderDaily();
+}
+
+async function cancelDailyBackfill() {
+  try {
+    const response = await fetch("/api/daily/backfill", { method: "DELETE" });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    Object.assign(daily, await response.json());
+  } catch (err) {
+    showMessage("Could not cancel the summaries", "The server is unreachable.");
+  }
+  renderDaily();
+}
+
+// Fetch the day list for the camera on screen, unless it is already held.
+function showDays(slug) {
+  if (!daily.enabled || !slug) return;
+  if (days.slug === slug) return;
+  days.slug = slug;
+  days.list = [];
+  days.more = false;
+  renderDays();
+  loadDays(slug);
+}
+
+async function loadDays(slug, older = false) {
+  if (days.loading && older) return;
+  days.loading = true;
+  const params = new URLSearchParams({ limit: 7 });
+  if (older && days.list.length) params.set("before", days.list[days.list.length - 1].date);
+  try {
+    const page = await getJSON(`/api/daily/${encodeURIComponent(slug)}?${params}`);
+    // The camera on screen changed while this was out.
+    if (days.slug !== slug) return;
+    days.list = older ? [...days.list, ...page.days] : page.days;
+    days.more = page.more;
+  } catch (err) {
+    if (days.slug === slug) days.slug = null;
+    return;
+  } finally {
+    days.loading = false;
+  }
+  renderDays();
+}
+
+// A summary written here or anywhere else: in place, if that day is listed.
+function mergeDay(slug, day) {
+  const selector = `.day-summary[data-slug="${cssEscape(slug)}"][data-date="${day.date}"]`;
+  for (const block of document.querySelectorAll(selector)) fillDaySummary(block, slug, day);
+  if (days.slug !== slug) return;
+  const at = days.list.findIndex((item) => item.date === day.date);
+  if (at < 0) return;
+  days.list[at] = day;
+  days.busy.delete(`${slug}|${day.date}`);
+  renderDays();
+}
+
+// "2026-11-03" is a calendar day where the server is, not an instant, so it
+// is read as local noon - safely that day whatever the offset.
+function dayStamp(date) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day, 12).toISOString();
+}
+
+function renderDays() {
+  const slug = days.slug;
+  const rows = days.list.map((day) => {
+    const row = document.createElement("li");
+    row.className = "daily-row";
+
+    const head = document.createElement("div");
+    head.className = "daily-head";
+    const label = document.createElement("button");
+    label.type = "button";
+    label.className = "daily-day";
+    label.textContent = dayLabel(dayStamp(day.date));
+    label.title = "Show this day in the library";
+    label.addEventListener("click", () => openLibraryWith({ camera: slug, until: day.date }));
+    const count = document.createElement("span");
+    count.className = "timeline-note";
+    count.textContent = day.clips ? plural(day.clips, "clip") : "";
+    head.append(label, count);
+
+    const { button, text } = daySummaryContent(slug, day);
+    if (button) head.append(button);
+    row.append(head, text);
+    return row;
+  });
+  el("daily-list").replaceChildren(...rows);
+  el("daily-empty").hidden = rows.length > 0 || days.loading;
+  el("daily-more").hidden = !days.more;
+}
+
+// What one day's summary shows, wherever it is shown: its text, and a button
+// to write it when there is something to write it from.
+function daySummaryContent(slug, day) {
+  const busy = days.busy.has(`${slug}|${day.date}`);
+  let button = null;
+  if (!day.today && day.described > 0 && (!day.summary || day.stale || busy)) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn small";
+    button.disabled = busy;
+    button.textContent = busy ? "Summarizing…" : day.summary ? "Update" : "Summarize";
+    if (day.stale) button.title = "Clips were described after this summary was written";
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      summarizeDay(slug, day.date);
+    });
+  }
+
+  const text = document.createElement("p");
+  text.className = "daily-text";
+  if (day.summary) {
+    text.append(...describe(day.summary));
+  } else {
+    text.classList.add("empty");
+    text.textContent = day.today
+      ? "Written once the day is over."
+      : day.described
+        ? "No summary of this day yet."
+        : "No descriptions to summarize.";
+  }
+  return { button, text };
+}
+
+// The library, narrowed to one camera, opens each past day with what the
+// model made of it. One request per day heading, only while summaries are on.
+function addDaySummaries() {
+  const slug = lib.filters.camera;
+  if (!daily.enabled || !slug) return;
+  const today = localDate(new Date().toISOString());
+  for (const heading of el("library-grid").querySelectorAll("h3.day[data-date]")) {
+    const date = heading.dataset.date;
+    const next = heading.nextElementSibling;
+    if (date >= today || (next && next.classList.contains("day-summary"))) continue;
+    const block = document.createElement("div");
+    block.className = "day-summary";
+    block.dataset.slug = slug;
+    block.dataset.date = date;
+    block.hidden = true;
+    heading.after(block);
+    loadDaySummary(block, slug, date);
+  }
+}
+
+async function loadDaySummary(block, slug, date) {
+  try {
+    const day = await getJSON(`/api/daily/${encodeURIComponent(slug)}/${date}`);
+    fillDaySummary(block, slug, day);
+  } catch (err) {
+    block.remove();
+  }
+}
+
+function fillDaySummary(block, slug, day) {
+  // A day with nothing described has nothing to say, here of all places.
+  if (!day.summary && !day.described) {
+    block.hidden = true;
+    return;
+  }
+  const { button, text } = daySummaryContent(slug, day);
+  block.replaceChildren(text, ...(button ? [button] : []));
+  block.hidden = false;
+}
+
+function removeDaySummaries() {
+  for (const block of document.querySelectorAll(".day-summary")) block.remove();
+}
+
+function refreshDayBlocks(slug, date) {
+  const selector = `.day-summary[data-slug="${cssEscape(slug)}"][data-date="${date}"]`;
+  for (const block of document.querySelectorAll(selector)) loadDaySummary(block, slug, date);
+}
+
+async function summarizeDay(slug, date) {
+  const key = `${slug}|${date}`;
+  if (days.busy.has(key)) return;
+  days.busy.add(key);
+  renderDays();
+  refreshDayBlocks(slug, date);
+  try {
+    const result = await post(`/api/daily/${encodeURIComponent(slug)}/${date}`, {});
+    if (result.status === "ok") mergeDay(slug, result.day);
+    else showMessage("No summary written", result.message || "The server said no.");
+  } catch (err) {
+    showMessage("No summary written", "The server is unreachable.");
+  } finally {
+    days.busy.delete(key);
+    renderDays();
+    refreshDayBlocks(slug, date);
   }
 }
 
