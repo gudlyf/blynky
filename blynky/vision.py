@@ -225,21 +225,12 @@ def _details(payload):
     return [name for name in config.DETAILS if name in picked]
 
 
-def _is_empty_summary(text):
-    """Whether a description indicates nothing of note was detected."""
-    normalized = str(text).strip().lower()
-    return (
-        normalized.startswith("nothing of note")
-        or "nothing of note is present" in normalized
-    )
-
-
 def _coerce(payload):
     """Turn a parsed JSON reply into a result, or None if it is not one."""
     if not isinstance(payload, dict):
         return None
     summary = (payload.get("summary") or "").strip()
-    if not summary or _is_empty_summary(summary):
+    if not summary:
         return None
 
     subjects = payload.get("subjects")
@@ -301,17 +292,6 @@ def _json_in(text):
             continue
 
 
-def says_nothing(text):
-    """Whether a reply, as prose or as JSON, says nothing of note happened."""
-    text = (text or "").strip()
-    if _is_empty_summary(text):
-        return True
-    return any(
-        isinstance(parsed, dict) and _is_empty_summary(parsed.get("summary") or "")
-        for parsed in _json_in(text)
-    )
-
-
 def parse_reply(text):
     """Read a model reply, however it chose to answer. Returns a result dict.
 
@@ -321,20 +301,16 @@ def parse_reply(text):
     the archive can infer those from the text later.
     """
     text = (text or "").strip()
-    if not text or _is_empty_summary(text):
+    if not text:
         return None
 
-    saw_empty_summary = False
+    # "Nothing of note" is an answer like any other - the prompt asks for it
+    # when the clip is empty - and is kept, with no subjects, so the capture
+    # does not look undescribed and get sent to the model again.
     for parsed in _json_in(text):
-        if isinstance(parsed, dict) and _is_empty_summary(parsed.get("summary") or ""):
-            saw_empty_summary = True
-            continue
         result = _coerce(parsed)
         if result:
             return result
-
-    if saw_empty_summary:
-        return None
 
     # Prose, or JSON that carried no summary. Either way the sentence itself
     # is still the description, which is exactly what this used to return.
@@ -478,11 +454,6 @@ async def describe(session, images):
         reply = parse_reply(raw_content)
         if reply:
             return reply
-        if says_nothing(raw_content):
-            # The answer the prompt asks for when the clip shows nothing, as
-            # JSON as often as not, so the raw text cannot be checked alone.
-            _LOGGER.debug("vision model saw nothing of note")
-            return None
         finish = choice.get("finish_reason")
         if finish == "length":
             # A reasoning model that spends its whole budget thinking returns
