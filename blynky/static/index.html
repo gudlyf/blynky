@@ -50,6 +50,7 @@
     <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/></symbol>
     <symbol id="i-bug" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9.5 7a2.5 2.5 0 0 1 5 0M12 11v9M3 13h4M17 13h4M4 7.5l3.2 2M20 7.5l-3.2 2M4 19.5l3.5-2.5M20 19.5l-3.5-2.5"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></symbol>
   </svg>
 
   <a class="skip" href="#app">Skip to content</a>
@@ -322,6 +323,10 @@
             <span>Up to</span>
             <input type="date" id="filter-until" aria-label="On or before">
           </label>
+          <button type="button" class="btn star-filter" id="filter-starred" aria-pressed="false"
+                  title="Only the captures you starred">
+            <svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><span>Starred</span><span class="star-count" id="starred-count"></span>
+          </button>
           <button type="button" class="btn ghost" id="filter-clear" hidden>Clear</button>
         </div>
         <button class="btn" id="describe-missing" type="button" hidden
@@ -347,6 +352,10 @@
         <span class="viewer-pos" id="viewer-pos"></span>
       </div>
       <div class="viewer-actions">
+        <button type="button" class="icon-btn on-dark star-btn" id="viewer-star"
+                aria-pressed="false" aria-label="Star" title="Star (*)">
+          <svg class="icon" aria-hidden="true"><use href="#i-star"/></svg>
+        </button>
         <a id="viewer-download" class="icon-btn on-dark" download
            aria-label="Download" title="Download">
           <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
@@ -451,6 +460,7 @@
         <dt><kbd>/</kbd></dt><dd>Search the library</dd>
         <dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>Open a camera</dd>
         <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next camera, or capture in the viewer</dd>
+        <dt><kbd>*</kbd></dt><dd>Star or unstar, in the viewer</dd>
         <dt><kbd>P</kbd></dt><dd>Play the clip, or back to the still</dd>
         <dt><kbd>R</kbd></dt><dd>Take a new picture</dd>
         <dt><kbd>S</kbd></dt><dd>Sync now</dd>

@@ -69,10 +69,13 @@ async def sweep(index, now=None):
 
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=config.RETAIN_DAYS)
+    # A starred capture is one somebody asked to keep, whatever its age.
     expired = [
         record
         for record in index.all()
-        if (stamp := library.parse_stamp(record["stamp"])) and stamp < cutoff
+        if (stamp := library.parse_stamp(record["stamp"]))
+        and stamp < cutoff
+        and not record.get("starred")
     ]
     if not expired:
         return {
