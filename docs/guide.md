@@ -73,6 +73,9 @@ only*.
   days, or until turned back on; see [Notifications](#notifications). Only
   shown when `NTFY_URL` is set, and unlike the rest of this menu it is not
   per browser.
+- **Daily summaries** — turn on a short summary of each camera's day, and
+  backfill the days that have none; see [Daily summaries](#daily-summaries).
+  Also the server's setting, not the browser's.
 - **Known people…** — see [Known people](#known-people).
 - **Full screen**, and **Keyboard shortcuts**.
 - **Report a bug…** — opens a new GitHub issue with your Blynky, blinkpy and
@@ -228,6 +231,45 @@ answering; too small a budget yields an empty response rather than an error.
 
 `.blink_creds.json` contains your Blink password in plaintext (blinkpy stores
 it alongside the tokens). It is chmod 600 and gitignored.
+
+## Daily summaries
+
+Off until you turn it on under **Daily summaries** in the settings menu (or set
+`DAILY_SUMMARIES=1`). Once it is on, a busy camera's day can be read in four
+sentences instead of fifty clip descriptions:
+
+- **Yesterday, unasked.** After `DAILY_HOUR` (1 a.m. by default) the server
+  sends each camera's descriptions from the day before to the model and keeps
+  what comes back. That is one text-only request per camera per day. No frames
+  are sent; the model only sees descriptions it already wrote. If a request
+  fails, the day keeps its **Summarize** button and is not retried on its own.
+- **Any past day, by hand.** Each camera's page lists its days under **Daily
+  summaries**, newest first. A day with no summary has a **Summarize** button,
+  which costs one request. A summary written before more of that day's clips
+  were described gets an **Update** button. Today is never summarized, because
+  it is not over yet. The day's name opens that day in the library.
+- **Every past day at once.** **Summarize N past days…** in the settings menu
+  writes the rest. It asks first, and says how many clip descriptions, how many
+  requests and roughly how many tokens that would be. Over a long archive that
+  is a lot of tokens, and on a paid or rate-limited provider a real bill, so use
+  caution. It works through one day at a time, oldest first. **Cancel**, in the
+  same menu or from the progress shown in the header, stops it at once,
+  including the request in flight, and keeps the days already done. Turning the
+  switch off also stops it.
+
+A summary is written from at most `DAILY_MAX_CLIPS` descriptions (300 by
+default). A day with more is sampled evenly across its hours. Clips with no
+description are left out, and a day with no descriptions at all has nothing to
+summarize.
+
+Summaries are kept in `data/daily/<camera>/<date>.json`. Retention never
+removes them, so a day's summary is still there after its footage has been
+pruned.
+
+A day runs midnight to midnight **in the server's time zone**. A container runs
+on UTC unless told otherwise, which ends each "day" in the evening for anyone
+in the Americas. Set `TZ` in `.env` (for example `TZ=America/New_York`) so the
+days are yours.
 
 ## What the model saw
 

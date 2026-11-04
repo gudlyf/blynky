@@ -16,7 +16,17 @@ from blinkpy.blinkpy import Blink
 from blinkpy.helpers.util import json_load, to_alphanumeric
 from slugify import slugify
 
-from . import cameras, config, library, media, notify, people, retention, vision
+from . import (
+    cameras,
+    config,
+    daily,
+    library,
+    media,
+    notify,
+    people,
+    retention,
+    vision,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,6 +122,16 @@ class Monitor:
         # tables were built. None until the first check after a login.
         self._systems = None
         self._sync_state = {"running": False, "found": 0, "saved": 0, "at": None}
+        # A short account of each camera's day, and the runs that write them:
+        # the backfill someone started, and yesterday's, written unasked.
+        self.daily = daily.Daily()
+        self._daily_task = None
+        self._daily_run = {"done": 0, "total": 0}
+        self._daily_auto = None
+        # The day the unasked run last covered, so it runs once a day.
+        self._daily_covered = None
+        # One summary at a time, whichever run or button asked for it.
+        self._daily_lock = asyncio.Lock()
         self._closing = False
 
     # -- pub/sub ----------------------------------------------------------
@@ -149,6 +169,7 @@ class Monitor:
             "cameras": list(self.cameras.values()),
             "events": list(self.events),
             "ntfy": notify.status(),
+            "daily": self.daily_status(),
         }
 
     def broadcast_ntfy(self):
@@ -174,6 +195,7 @@ class Monitor:
         await self.people.load()
         await self.names.load()
         await notify.load()
+        await self.daily.load()
         self.start_thumbnails()
         creds = await json_load(config.CREDFILE)
         if not creds:
@@ -367,7 +389,14 @@ class Monitor:
         self._closing = True
         tasks = [
             task
-            for task in (self._task, self._backfill, self._thumbs, *self._describing)
+            for task in (
+                self._task,
+                self._backfill,
+                self._thumbs,
+                self._daily_task,
+                self._daily_auto,
+                *self._describing,
+            )
             if task
         ]
         for task in tasks:
@@ -409,6 +438,7 @@ class Monitor:
                 raise
             except Exception as error:  # noqa: BLE001 - never end the loop over this
                 _LOGGER.exception("retention sweep failed: %s", error)
+            self._daily_tick()
 
             self._broadcast(
                 {
@@ -1060,6 +1090,121 @@ class Monitor:
         status["running"] = True
         self._broadcast_backfill(running=True)
         return status
+
+    # -- daily summaries --------------------------------------------------
+
+    def daily_status(self, running=None):
+        """Return whether summaries are on, and how a backfill stands.
+
+        `running` overrides the task's own state, as for backfill_status().
+        """
+        if running is None:
+            running = self._daily_task is not None and not self._daily_task.done()
+        return {
+            "enabled": self.daily.enabled,
+            "running": running,
+            **self._daily_run,
+            **self.daily.backlog(self.library.all()),
+        }
+
+    def _broadcast_daily(self, running=None):
+        self._broadcast({"type": "daily", "daily": self.daily_status(running)})
+
+    async def set_daily(self, enabled):
+        """Turn daily summaries on or off. Off also stops a backfill."""
+        await self.daily.set_enabled(enabled)
+        if not enabled:
+            return self.cancel_daily_backfill()
+        self._broadcast_daily()
+        return self.daily_status()
+
+    async def summarize_day(self, slug, day):
+        """Write one camera's summary for one day. Returns it, or None."""
+        async with self._daily_lock:
+            entry = await self.daily.write(self.session, self.library.all(), slug, day)
+        if entry:
+            self._broadcast({"type": "day", "slug": slug, "day": entry})
+        return entry
+
+    def start_daily_backfill(self):
+        """Begin summarizing every past day that has none. Returns the status."""
+        status = self.daily_status()
+        if not status["enabled"] or status["running"] or not status["pending"]:
+            return status
+        self._daily_run = {"done": 0, "total": status["pending"]}
+        self._daily_task = asyncio.create_task(self._run_daily_backfill())
+        self._broadcast_daily(running=True)
+        return self.daily_status(running=True)
+
+    def cancel_daily_backfill(self):
+        """Stop a backfill now, including the request it has in flight."""
+        task = self._daily_task
+        if task and not task.done():
+            task.cancel()
+        self._broadcast_daily(running=False)
+        return self.daily_status(running=False)
+
+    async def _run_daily_backfill(self):
+        """Summarize the days that have none, oldest first."""
+        pending = self.daily.pending(self.library.all())
+        _LOGGER.info("daily: backfilling %d day(s)", len(pending))
+        written = 0
+        try:
+            for slug, day, _ in pending:
+                if self._closing or not self.daily.enabled:
+                    break
+                try:
+                    if await self.summarize_day(slug, day):
+                        written += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:  # noqa: BLE001 - one bad day is not fatal
+                    _LOGGER.exception("daily: %s on %s failed: %s", slug, day, error)
+                self._daily_run["done"] += 1
+                self._broadcast_daily(running=True)
+                await asyncio.sleep(config.DAILY_PAUSE)
+        except asyncio.CancelledError:
+            _LOGGER.info(
+                "daily: backfill cancelled after %d of %d",
+                self._daily_run["done"],
+                len(pending),
+            )
+            raise
+        finally:
+            self._broadcast_daily(running=False)
+        _LOGGER.info("daily: backfill wrote %d of %d", written, len(pending))
+
+    def _daily_tick(self):
+        """Summarize yesterday for every camera, once, when the time comes."""
+        if not self.daily.enabled:
+            return
+        if datetime.now().astimezone().hour < config.DAILY_HOUR:
+            return
+        day = daily.yesterday()
+        if self._daily_covered == day:
+            return
+        if self._daily_auto is not None and not self._daily_auto.done():
+            return
+        self._daily_auto = asyncio.create_task(self._run_daily_auto(day))
+
+    async def _run_daily_auto(self, day):
+        pending = self.daily.pending(self.library.all())
+        slugs = [slug for slug, held, _ in pending if held == day]
+        for slug in slugs:
+            if self._closing or not self.daily.enabled:
+                return
+            try:
+                await self.summarize_day(slug, day)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001 - never end the poll loop
+                _LOGGER.exception("daily: %s on %s failed: %s", slug, day, error)
+            await asyncio.sleep(config.DAILY_PAUSE)
+        # Covered even if the model failed: retrying every minute would spend
+        # tokens all day, and the day keeps its button for a manual retry.
+        self._daily_covered = day
+        if slugs:
+            self._broadcast_daily()
 
     def start_thumbnails(self):
         """Begin making thumbnails for captures that have none."""

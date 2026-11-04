@@ -320,6 +320,10 @@ h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .1px; white-s
 /* Easy to forget a pause set before bed, so it shows until it ends. */
 .ntfy-paused { border: 0; color: var(--alert); cursor: pointer; }
 .ntfy-paused .icon { width: 13px; height: 13px; }
+/* A backfill of summaries can run for a long time; it shows, and opens the
+   menu its Cancel button is in. */
+.daily-running { border: 0; color: var(--accent); cursor: pointer; font-variant-numeric: tabular-nums; }
+.daily-running .icon { width: 13px; height: 13px; animation: spin 1s linear infinite; }
 
 .last-check {
   font-size: 12.5px;
@@ -400,6 +404,8 @@ h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .1px; white-s
 }
 .menu-note { margin: 0; padding: 2px 8px 6px; font-size: 12px; color: var(--muted); }
 .menu-note.paused { color: var(--alert); }
+.menu-actions { display: flex; gap: 6px; padding: 0 8px 8px; }
+.menu-actions .btn { flex: 1; }
 .menu-version { padding-top: 6px; font-variant-numeric: tabular-nums; user-select: text; }
 .menu-version:empty { display: none; }
 
@@ -848,6 +854,29 @@ span.tl-thumb .icon { width: 14px; height: 14px; }
 .tl-text.pending { color: var(--muted); font-style: italic; }
 .tl-text.empty { color: var(--muted); opacity: .7; }
 
+/* One camera's days, each with what the model made of it. */
+.daily-list { margin: 0; padding: 0; list-style: none; }
+.daily-row { padding: 10px 16px 12px; border-top: 1px solid var(--line); }
+.daily-row:first-child { border-top: 0; }
+.daily-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.daily-head .btn { margin-left: auto; }
+.daily-day {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.daily-day:hover { color: var(--accent); text-decoration: underline; }
+.daily-text { margin: 4px 0 0; font-size: 14px; line-height: 1.55; text-wrap: pretty; }
+.daily-text.empty { color: var(--muted); font-size: 13px; }
+.daily-more { padding: 0 16px 16px; }
+.daily-more:has(> [hidden]) { display: none; }
+.btn.small { min-height: 28px; padding: 3px 10px; font-size: 12px; }
+
 .timeline-empty {
   margin: 0;
   padding: 14px;
@@ -1077,6 +1106,15 @@ span.toast-thumb { display: grid; place-items: center; color: var(--muted); }
 .login-logo { width: 32px; height: 32px; color: var(--accent); stroke-width: 2; margin-bottom: 10px; }
 .login h2 { margin: 0 0 8px; font-size: 18px; }
 
+.sheet .warning {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--alert) 12%, transparent);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
 .login .hint, .sheet .hint {
   margin: 0 0 18px;
   font-size: 12.5px;

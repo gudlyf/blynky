@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import WSMsgType, web
 
-from . import config, library, notify
+from . import config, daily, library, notify
 
 _LOGGER = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -323,6 +323,79 @@ async def sync(request):
     return web.json_response(monitor.start_sync())
 
 
+async def daily_summaries(request):
+    """Turn daily summaries on or off, and say how the backlog stands.
+
+    POST {"enabled": true} or {"enabled": false}. Like the ntfy pause, this is
+    the server's setting, so it holds for everyone.
+    """
+    monitor = request.app["monitor"]
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except ValueError:
+            raise web.HTTPBadRequest(reason="expected JSON") from None
+        if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
+            raise web.HTTPBadRequest(reason="enabled must be true or false")
+        return web.json_response(await monitor.set_daily(body["enabled"]))
+    return web.json_response(monitor.daily_status())
+
+
+async def daily_backfill(request):
+    """Start summarizing every past day that has none, or cancel that."""
+    monitor = request.app["monitor"]
+    if request.method == "DELETE":
+        return web.json_response(monitor.cancel_daily_backfill())
+    if not monitor.daily.enabled:
+        raise web.HTTPConflict(reason="daily summaries are turned off")
+    return web.json_response(monitor.start_daily_backfill())
+
+
+async def camera_days(request):
+    """List one camera's days, newest first, with their summaries."""
+    monitor = request.app["monitor"]
+    before = request.query.get("before") or None
+    if before is not None and daily.parse_day(before) is None:
+        raise web.HTTPBadRequest(reason="before must be YYYY-MM-DD")
+    try:
+        limit = max(1, min(int(request.query.get("limit") or 14), 60))
+    except ValueError:
+        raise web.HTTPBadRequest(reason="limit must be a number") from None
+    page = monitor.daily.days(
+        monitor.library.all(), request.match_info["slug"], before=before, limit=limit
+    )
+    return web.json_response(page)
+
+
+async def summarize_day(request):
+    """Write the summary for one camera's day, and return it."""
+    monitor = request.app["monitor"]
+    if not monitor.daily.enabled:
+        raise web.HTTPConflict(reason="daily summaries are turned off")
+    day = daily.parse_day(request.match_info["day"])
+    if day is None:
+        raise web.HTTPBadRequest(reason="day must be YYYY-MM-DD")
+    # Today is still happening; a summary of half of it would read as all.
+    if day >= daily.today():
+        return web.json_response(
+            {"status": "error", "message": "That day is not over yet."}
+        )
+    try:
+        entry = await monitor.summarize_day(request.match_info["slug"], day.isoformat())
+    except LookupError:
+        return web.json_response(
+            {"status": "error", "message": "That day has no descriptions to summarize."}
+        )
+    if entry is None:
+        return web.json_response(
+            {
+                "status": "error",
+                "message": "The model gave nothing back. The server log says why.",
+            }
+        )
+    return web.json_response({"status": "ok", "day": entry})
+
+
 async def ntfy(request):
     """Pause or resume push notifications, and say whether they are paused.
 
@@ -423,6 +496,12 @@ def create_app(monitor):
     app.router.add_post("/api/backfill", backfill)
     app.router.add_get("/api/sync", sync)
     app.router.add_post("/api/sync", sync)
+    app.router.add_get("/api/daily", daily_summaries)
+    app.router.add_post("/api/daily", daily_summaries)
+    app.router.add_post("/api/daily/backfill", daily_backfill)
+    app.router.add_delete("/api/daily/backfill", daily_backfill)
+    app.router.add_get("/api/daily/{slug}", camera_days)
+    app.router.add_post("/api/daily/{slug}/{day}", summarize_day)
     app.router.add_get("/api/ntfy", ntfy)
     app.router.add_post("/api/ntfy", ntfy)
     app.router.add_get("/ws", websocket)

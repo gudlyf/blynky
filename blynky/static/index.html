@@ -80,6 +80,10 @@
               popovertarget="settings" title="Push notifications are paused">
         <svg class="icon" aria-hidden="true"><use href="#i-bell-off"/></svg><span>Push paused</span>
       </button>
+      <button type="button" class="status daily-running" id="daily-running" hidden
+              popovertarget="settings" title="Writing daily summaries. Open settings to cancel">
+        <svg class="icon" aria-hidden="true"><use href="#i-sync"/></svg><span id="daily-running-label">Summarizing…</span>
+      </button>
       <label class="switch follow" title="Jump to a camera when it sees motion (F)">
         <input type="checkbox" id="follow" role="switch" checked>
         <span>Follow motion</span>
@@ -143,6 +147,19 @@
         </select>
       </label>
       <p class="menu-note" id="ntfy-note" aria-live="polite"></p>
+    </div>
+    <!-- Also the server's setting rather than this browser's: summaries are
+         written by the server, from every camera's descriptions. -->
+    <div class="menu-sep"></div>
+    <label class="switch menu-row"
+           title="Once a day, send each camera's clip descriptions to the model for a short summary of its day. Applies to everyone, not just this browser">
+      <input type="checkbox" id="daily-on" role="switch">
+      <span>Daily summaries</span>
+    </label>
+    <p class="menu-note" id="daily-note" aria-live="polite"></p>
+    <div class="menu-actions" id="daily-actions" hidden>
+      <button type="button" class="btn" id="daily-backfill" hidden></button>
+      <button type="button" class="btn danger" id="daily-cancel" hidden>Cancel</button>
     </div>
     <div class="menu-sep"></div>
     <button type="button" class="menu-item" id="open-people">
@@ -252,6 +269,19 @@
           <p class="timeline-empty" id="detail-timeline-empty">
             No motion recorded for this camera yet.
           </p>
+        </section>
+
+        <!-- What the model made of each whole day here. Only while daily
+             summaries are on. -->
+        <section class="timeline inset" id="detail-daily" hidden aria-labelledby="detail-daily-title">
+          <div class="timeline-head">
+            <h2 id="detail-daily-title">Daily summaries</h2>
+          </div>
+          <ol class="daily-list" id="daily-list"></ol>
+          <p class="timeline-empty" id="daily-empty" hidden>No days recorded for this camera yet.</p>
+          <div class="daily-more">
+            <button type="button" class="btn ghost" id="daily-more" hidden>Older days</button>
+          </div>
         </section>
       </div>
     </section>
@@ -381,6 +411,24 @@
         library.</p>
       <div class="people-list" id="people-list"></div>
     </div>
+  </dialog>
+
+  <!-- Asked before every backfill of daily summaries: it can be a lot of calls. -->
+  <dialog class="sheet" id="daily-dialog" aria-labelledby="daily-title">
+    <form method="dialog" class="sheet-body">
+      <h2 id="daily-title">Summarize every past day?</h2>
+      <p class="warning" id="daily-warning"></p>
+      <p class="hint">Each day is a separate request to the model, and the
+        descriptions of every clip that day go with it. Over a long archive
+        that can mean heavy token use and, on a paid or rate-limited
+        provider, real cost - use caution. It runs one day at a time, and
+        you can cancel at any point from the settings menu; days already
+        summarized are kept.</p>
+      <div class="sheet-actions">
+        <button type="submit" class="btn ghost" value="cancel" autofocus>Cancel</button>
+        <button type="submit" class="btn primary" value="ok" id="daily-confirm">Summarize</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Keyboard shortcuts. -->

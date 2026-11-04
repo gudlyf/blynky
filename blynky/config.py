@@ -228,6 +228,48 @@ NTFY_STATE = DATA_DIR / "ntfy.json"
 # back on" is separate and has no limit.
 NTFY_MAX_PAUSE_HOURS = 24 * 7
 
+# One short account of each camera's day, written by the model from that day's
+# descriptions. Off unless switched on, from the settings menu or here: it is
+# one more model call per camera per day, and a backfill is one per day held.
+# A day runs midnight to midnight in the server's time zone, so set TZ (for
+# example TZ=America/New_York) when the server does not run on local time -
+# a container runs on UTC unless told otherwise.
+DAILY_SUMMARIES = os.environ.get("DAILY_SUMMARIES") == "1"
+DAILY_DIR = DATA_DIR / "daily"
+# The switch in the settings menu, kept so a restart remembers it. Once it has
+# been used it wins over DAILY_SUMMARIES.
+DAILY_STATE = DATA_DIR / "daily.json"
+
+# Hour of the day, local time, after which yesterday is summarized. An hour's
+# grace lets the last clips before midnight finish being described first.
+DAILY_HOUR = int(os.environ.get("DAILY_HOUR", "1"))
+
+# The most clip descriptions one summary is written from. A camera facing a
+# road can log hundreds a day, and past a point more lines add tokens, not
+# insight; a day over the limit is sampled evenly across its hours.
+DAILY_MAX_CLIPS = int(os.environ.get("DAILY_MAX_CLIPS", "300"))
+
+# Seconds between days while a backfill works through them, for the same
+# reason as BACKFILL_PAUSE: live motion shares the model.
+DAILY_PAUSE = float(os.environ.get("DAILY_PAUSE", "2"))
+
+DAILY_SYSTEM_PROMPT = (
+    "You write a short daily digest for one home security camera, from the "
+    "descriptions of each motion clip it recorded that day. Be brief and "
+    "factual. Group routine, repeated activity - passing cars, swaying "
+    "plants, nothing of note - into a phrase rather than listing it, and call "
+    "out what someone would want to know: people at or near the house, "
+    "deliveries, animals, anything unusual, with rough times written the way "
+    "they are given. Use only what "
+    "the descriptions say; do not guess at intent or identity. Plain prose: "
+    "no preamble, headings, lists or closing commentary."
+)
+
+DAILY_PROMPT = (
+    "Summarize this camera's day in at most four sentences. Reply with the "
+    "summary and nothing else."
+)
+
 SYSTEM_PROMPT = (
     "You summarize home security camera footage. Be brief and factual. "
     "Lead with whatever triggered the motion - people, animals, vehicles, "
