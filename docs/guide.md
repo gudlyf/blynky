@@ -688,7 +688,14 @@ roughly a gigabyte every two weeks.
 is in them, so what is on disk follows from the calendar rather than from what
 a model once said. The one exception is a capture someone
 [starred](#starred-captures): that is a person saying "keep this", and it is
-kept however old it gets, until it is unstarred. It defaults to `0`, meaning keep everything: upgrading must
+kept however old it gets, until it is unstarred. Nothing else in Blynky
+deletes captures on its own, and this rule has no setting to turn it off. The
+star is checked when the sweep starts and again, against the sidecar on disk,
+immediately before each capture's files are deleted. So a star set while a
+sweep is running still counts, and so does one written into a sidecar by
+hand. A capture whose sidecar cannot be read is kept as well, since there is
+no telling whether it was starred. The log says what was kept and why, and
+the dry run reports how many starred captures it is keeping. It defaults to `0`, meaning keep everything: upgrading must
 not start deleting footage on its own.
 
 Age is read from the capture's own timestamp, never the file's mtime — this
