@@ -34,6 +34,8 @@ const sync = { running: false, found: 0, saved: 0, at: null };
 // backfill of past days has got. The server's setting, shared by everyone.
 const daily = {
   enabled: false,
+  ntfy: false,    // whether the server has an ntfy topic to send to
+  notify: false,  // whether each night's summaries are pushed there
   running: false,
   done: 0,
   total: 0,
@@ -2818,24 +2820,9 @@ function renderNtfy() {
 
 function setupDaily() {
   const box = el("daily-on");
-  box.addEventListener("change", async () => {
-    box.disabled = true;
-    try {
-      const response = await fetch("/api/daily", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: box.checked }),
-      });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      Object.assign(daily, await response.json());
-    } catch (err) {
-      showMessage("Could not change daily summaries", "The server is unreachable.");
-    } finally {
-      box.disabled = false;
-      days.slug = null;
-      renderDaily();
-    }
-  });
+  box.addEventListener("change", () => setDaily(box, { enabled: box.checked }));
+  const send = el("daily-notify");
+  send.addEventListener("change", () => setDaily(send, { notify: send.checked }));
 
   el("daily-backfill").addEventListener("click", askDailyBackfill);
   el("daily-cancel").addEventListener("click", cancelDailyBackfill);
@@ -2847,12 +2834,34 @@ function setupDaily() {
   el("daily-more").addEventListener("click", () => loadDays(days.slug, true));
 }
 
+async function setDaily(box, payload) {
+  box.disabled = true;
+  try {
+    const response = await fetch("/api/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    Object.assign(daily, await response.json());
+  } catch (err) {
+    showMessage("Could not change daily summaries", "The server is unreachable.");
+  } finally {
+    box.disabled = false;
+    if ("enabled" in payload) days.slug = null;
+    // Puts the switch back where the server says it is if the request failed.
+    renderDaily();
+  }
+}
+
 function plural(count, word) {
   return `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
 }
 
 function renderDaily() {
   el("daily-on").checked = daily.enabled;
+  el("daily-notify-row").hidden = !(daily.enabled && daily.ntfy);
+  el("daily-notify").checked = daily.notify;
   const note = el("daily-note");
   const backfillButton = el("daily-backfill");
   const cancel = el("daily-cancel");

@@ -240,6 +240,14 @@ DAILY_DIR = DATA_DIR / "daily"
 # been used it wins over DAILY_SUMMARIES.
 DAILY_STATE = DATA_DIR / "daily.json"
 
+# Push each camera's summary of yesterday to ntfy as it is written. The
+# settings menu has a switch for this too, which wins once used. Only the
+# summary written unasked each night is sent - never a backfill, which would
+# be a notification for every day in the archive.
+NTFY_DAILY = os.environ.get("NTFY_DAILY") == "1"
+# Low by default: it lands in the small hours, and is reading, not an alert.
+NTFY_DAILY_PRIORITY = int(os.environ.get("NTFY_DAILY_PRIORITY", "2"))
+
 # Hour of the day, local time, after which yesterday is summarized. An hour's
 # grace lets the last clips before midnight finish being described first.
 DAILY_HOUR = int(os.environ.get("DAILY_HOUR", "1"))

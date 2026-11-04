@@ -167,6 +167,51 @@ def _click(event):
     return f"{config.BLYNKY_URL}/#/event/{quote(event['id'], safe='')}"
 
 
+def _day_click(slug, day):
+    """Return the address that opens one camera's day in the library."""
+    if not config.BLYNKY_URL:
+        return None
+    query = f"camera={quote(slug, safe='')}&until={day}"
+    return f"{config.BLYNKY_URL}/#/library?{query}"
+
+
+async def send_daily(session, camera, slug, day, summary):
+    """Push one camera's daily summary. Returns True if it was accepted.
+
+    Not subject to the per-camera cooldown, which is for motion, but a pause
+    from the settings menu holds for these too.
+    """
+    if not config.NTFY_URL or _paused():
+        return False
+    when = datetime.fromisoformat(day)
+    headers = {
+        "Title": _header(f"{camera} - {when:%A, %B} {when.day}"),
+        "Tags": "calendar",
+        "Priority": str(config.NTFY_DAILY_PRIORITY),
+    }
+    click = _day_click(slug, day)
+    if click:
+        headers["Click"] = click
+    try:
+        response = await session.post(
+            config.NTFY_URL,
+            data=summary.encode("utf-8"),
+            headers=headers,
+            timeout=ClientTimeout(total=config.NTFY_TIMEOUT),
+        )
+        text = await response.text()
+        if response.status >= 400:
+            _LOGGER.error("ntfy returned %s: %s", response.status, text[:200])
+            return False
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:  # noqa: BLE001 - a missed summary is not fatal
+        _LOGGER.error("ntfy request failed: %s", error)
+        return False
+    _LOGGER.info("ntfy: daily summary for %s on %s", camera, day)
+    return True
+
+
 def should_send(event):
     """Say whether this event is one to push, and why not when it is not."""
     if not config.NTFY_URL:

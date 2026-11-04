@@ -1102,6 +1102,9 @@ class Monitor:
             running = self._daily_task is not None and not self._daily_task.done()
         return {
             "enabled": self.daily.enabled,
+            # Sending them to ntfy is only offered when there is a topic.
+            "ntfy": bool(config.NTFY_URL),
+            "notify": self.daily.notify,
             "running": running,
             **self._daily_run,
             **self.daily.backlog(self.library.all()),
@@ -1110,11 +1113,14 @@ class Monitor:
     def _broadcast_daily(self, running=None):
         self._broadcast({"type": "daily", "daily": self.daily_status(running)})
 
-    async def set_daily(self, enabled):
-        """Turn daily summaries on or off. Off also stops a backfill."""
-        await self.daily.set_enabled(enabled)
-        if not enabled:
-            return self.cancel_daily_backfill()
+    async def set_daily(self, enabled=None, notify=None):
+        """Change either daily setting. Turning summaries off stops a backfill."""
+        if notify is not None:
+            await self.daily.set_notify(notify)
+        if enabled is not None:
+            await self.daily.set_enabled(enabled)
+            if not enabled:
+                return self.cancel_daily_backfill()
         self._broadcast_daily()
         return self.daily_status()
 
@@ -1194,7 +1200,12 @@ class Monitor:
             if self._closing or not self.daily.enabled:
                 return
             try:
-                await self.summarize_day(slug, day)
+                written = await self.summarize_day(slug, day)
+                stored = self.daily.entry(slug, day)
+                if written and stored and self.daily.notify:
+                    await notify.send_daily(
+                        self.session, stored["camera"], slug, day, stored["summary"]
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception as error:  # noqa: BLE001 - never end the poll loop

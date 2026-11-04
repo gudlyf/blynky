@@ -250,6 +250,14 @@ with exact times. The clips themselves are a click away in the library:
   which costs one request. A summary written before more of that day's clips
   were described gets an **Update** button. Today is never summarized, because
   it is not over yet. The day's name opens that day in the library.
+- **On your phone.** With `NTFY_URL` set, a **Send to ntfy** switch appears
+  under Daily summaries. While it is on, each camera's summary of yesterday is
+  pushed as it is written: one notification per camera, titled with the camera
+  and the day. Tapping it opens that camera's day in the library when
+  `BLYNKY_URL` is set. They arrive in the small hours, so they go at low
+  priority (`NTFY_DAILY_PRIORITY`, default `2`), which ntfy delivers without a
+  sound. Only the nightly summaries are sent. A backfill or a **Summarize**
+  button never sends one, and pausing push notifications pauses these too.
 - **In the library.** With the library narrowed to one camera, each past day
   opens with its summary under the day's heading, or a **Summarize** button
   when it has none.

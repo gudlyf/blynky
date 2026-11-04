@@ -156,6 +156,11 @@
       <input type="checkbox" id="daily-on" role="switch">
       <span>Daily summaries</span>
     </label>
+    <label class="switch menu-row menu-indent" id="daily-notify-row" hidden
+           title="Push each camera's summary of yesterday to ntfy as it is written, at low priority. Backfilled days are never sent">
+      <input type="checkbox" id="daily-notify" role="switch">
+      <span>Send to ntfy</span>
+    </label>
     <p class="menu-note" id="daily-note" aria-live="polite"></p>
     <div class="menu-actions" id="daily-actions" hidden>
       <button type="button" class="btn" id="daily-backfill" hidden></button>

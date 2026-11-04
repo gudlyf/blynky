@@ -86,6 +86,8 @@ class Daily:
         """Start empty; call load() before serving."""
         self._entries = {}
         self.enabled = config.DAILY_SUMMARIES
+        # Whether the summary written each night is also pushed to ntfy.
+        self.notify = config.NTFY_DAILY
 
     # -- persistence ------------------------------------------------------
 
@@ -96,7 +98,9 @@ class Daily:
             text = await asyncio.to_thread(
                 config.DAILY_STATE.read_text, encoding="utf-8"
             )
-            self.enabled = bool(json.loads(text).get("enabled"))
+            stored = json.loads(text)
+            self.enabled = bool(stored.get("enabled"))
+            self.notify = bool(stored.get("notify", self.notify))
         except FileNotFoundError:
             pass
         except (OSError, ValueError, AttributeError) as error:
@@ -125,13 +129,26 @@ class Daily:
     async def set_enabled(self, enabled):
         """Turn writing summaries on or off, and remember it across restarts."""
         self.enabled = bool(enabled)
-        payload = json.dumps({"enabled": self.enabled})
+        await self._save()
+        _LOGGER.info("daily summaries turned %s", "on" if self.enabled else "off")
+
+    async def set_notify(self, notify):
+        """Turn pushing each night's summaries to ntfy on or off."""
+        self.notify = bool(notify)
+        await self._save()
+        _LOGGER.info("daily summaries to ntfy %s", "on" if self.notify else "off")
+
+    async def _save(self):
+        payload = json.dumps({"enabled": self.enabled, "notify": self.notify})
         try:
             await asyncio.to_thread(_write_atomic, config.DAILY_STATE, payload)
         except OSError as error:
             # Still switched for as long as this process runs.
             _LOGGER.warning("could not write %s: %s", config.DAILY_STATE, error)
-        _LOGGER.info("daily summaries turned %s", "on" if self.enabled else "off")
+
+    def entry(self, slug, day):
+        """Return the stored summary for one camera's day, or None."""
+        return self._entries.get((slug, day))
 
     # -- reading ----------------------------------------------------------
 

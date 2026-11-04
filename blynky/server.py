@@ -324,10 +324,11 @@ async def sync(request):
 
 
 async def daily_summaries(request):
-    """Turn daily summaries on or off, and say how the backlog stands.
+    """Change the daily summary settings, and say how the backlog stands.
 
-    POST {"enabled": true} or {"enabled": false}. Like the ntfy pause, this is
-    the server's setting, so it holds for everyone.
+    POST {"enabled": bool} turns summaries on or off, {"notify": bool} sends
+    each night's to ntfy or not; either or both. Like the ntfy pause, these
+    are the server's settings, so they hold for everyone.
     """
     monitor = request.app["monitor"]
     if request.method == "POST":
@@ -335,9 +336,12 @@ async def daily_summaries(request):
             body = await request.json()
         except ValueError:
             raise web.HTTPBadRequest(reason="expected JSON") from None
-        if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
-            raise web.HTTPBadRequest(reason="enabled must be true or false")
-        return web.json_response(await monitor.set_daily(body["enabled"]))
+        if not isinstance(body, dict):
+            raise web.HTTPBadRequest(reason="expected a JSON object")
+        changes = {key: body[key] for key in ("enabled", "notify") if key in body}
+        if not changes or not all(isinstance(v, bool) for v in changes.values()):
+            raise web.HTTPBadRequest(reason="enabled and notify must be true or false")
+        return web.json_response(await monitor.set_daily(**changes))
     return web.json_response(monitor.daily_status())
 
 

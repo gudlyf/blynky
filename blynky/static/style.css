@@ -404,6 +404,7 @@ h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .1px; white-s
 }
 .menu-note { margin: 0; padding: 2px 8px 6px; font-size: 12px; color: var(--muted); }
 .menu-note.paused { color: var(--alert); }
+.menu-indent { padding-left: 20px; color: var(--muted); }
 .menu-actions { display: flex; gap: 6px; padding: 0 8px 8px; }
 .menu-actions .btn { flex: 1; }
 .menu-version { padding-top: 6px; font-variant-numeric: tabular-nums; user-select: text; }

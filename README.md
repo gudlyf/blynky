@@ -146,6 +146,8 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `BACKFILL_PAUSE` | `2` | Seconds between clips while working through that backlog |
 | `DESCRIBE_ATTEMPTS` | `3` | Give up on a clip after this many failed attempts |
 | `DAILY_SUMMARIES` | unset | `1` turns on a short summary of each camera's day. The switch in the settings menu overrides this once used. See the [guide](docs/guide.md#daily-summaries) |
+| `NTFY_DAILY` | unset | `1` pushes each night's daily summaries to ntfy. The **Send to ntfy** switch in the settings menu overrides this once used |
+| `NTFY_DAILY_PRIORITY` | `2` | ntfy priority for those summaries. Low, so they arrive without a sound |
 | `DAILY_HOUR` | `1` | Hour, server time, after which yesterday is summarized |
 | `DAILY_MAX_CLIPS` | `300` | Most clip descriptions one day's summary is written from |
 | `DAILY_PAUSE` | `2` | Seconds between days while backfilling summaries |
