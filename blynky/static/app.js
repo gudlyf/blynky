@@ -1168,12 +1168,14 @@ function appendLibrary(records) {
       const heading = document.createElement("h3");
       heading.className = "day";
       heading.textContent = dayLabel(record.stamp);
+      heading.dataset.date = localDate(record.stamp);
       grid.append(heading);
     }
     lib.items.push(record);
     grid.append(libraryTile(record));
     previous = record;
   }
+  addDaySummaries();
   el("library-empty").hidden = lib.items.length > 0;
   el("library-empty").textContent = hasFilters()
     ? "Nothing matches these filters."
@@ -1254,12 +1256,16 @@ function prependLibrary(record) {
 
   const tile = libraryTile(record);
   if (dayKey(record.stamp) === dayKey(first.stamp)) {
-    // Today's heading is already there; the tile goes directly under it.
-    grid.insertBefore(tile, grid.children[1] || null);
+    // The day's heading is already there, and maybe its summary; the tile
+    // goes directly under them.
+    let after = grid.children[1] || null;
+    if (after && after.classList.contains("day-summary")) after = after.nextSibling;
+    grid.insertBefore(tile, after);
   } else {
     const heading = document.createElement("h3");
     heading.className = "day";
     heading.textContent = dayLabel(record.stamp);
+    heading.dataset.date = localDate(record.stamp);
     grid.prepend(tile);
     grid.prepend(heading);
   }
@@ -2869,6 +2875,8 @@ function renderDaily() {
   el("daily-running-label").textContent = `Summarizing ${daily.done}/${daily.total}`;
 
   el("detail-daily").hidden = !daily.enabled;
+  if (daily.enabled) addDaySummaries();
+  else removeDaySummaries();
   if (state.selected) {
     const camera = state.cameras.get(state.selected);
     if (camera) showDays(camera.slug);
@@ -2946,6 +2954,8 @@ async function loadDays(slug, older = false) {
 
 // A summary written here or anywhere else: in place, if that day is listed.
 function mergeDay(slug, day) {
+  const selector = `.day-summary[data-slug="${cssEscape(slug)}"][data-date="${day.date}"]`;
+  for (const block of document.querySelectorAll(selector)) fillDaySummary(block, slug, day);
   if (days.slug !== slug) return;
   const at = days.list.findIndex((item) => item.date === day.date);
   if (at < 0) return;
@@ -2980,34 +2990,8 @@ function renderDays() {
     count.textContent = day.clips ? plural(day.clips, "clip") : "";
     head.append(label, count);
 
-    const key = `${slug}|${day.date}`;
-    const busy = days.busy.has(key);
-    const canWrite = !day.today && day.described > 0;
-    if (canWrite && (!day.summary || day.stale || busy)) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn small";
-      button.disabled = busy;
-      button.textContent = busy ? "Summarizing…" : day.summary ? "Update" : "Summarize";
-      if (day.stale) {
-        button.title = "Clips were described after this summary was written";
-      }
-      button.addEventListener("click", () => summarizeDay(slug, day.date));
-      head.append(button);
-    }
-
-    const text = document.createElement("p");
-    text.className = "daily-text";
-    if (day.summary) {
-      text.append(...describe(day.summary));
-    } else {
-      text.classList.add("empty");
-      text.textContent = day.today
-        ? "Written once the day is over."
-        : day.described
-          ? "No summary yet."
-          : "No descriptions to summarize.";
-    }
+    const { button, text } = daySummaryContent(slug, day);
+    if (button) head.append(button);
     row.append(head, text);
     return row;
   });
@@ -3016,11 +3000,94 @@ function renderDays() {
   el("daily-more").hidden = !days.more;
 }
 
+// What one day's summary shows, wherever it is shown: its text, and a button
+// to write it when there is something to write it from.
+function daySummaryContent(slug, day) {
+  const busy = days.busy.has(`${slug}|${day.date}`);
+  let button = null;
+  if (!day.today && day.described > 0 && (!day.summary || day.stale || busy)) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn small";
+    button.disabled = busy;
+    button.textContent = busy ? "Summarizing…" : day.summary ? "Update" : "Summarize";
+    if (day.stale) button.title = "Clips were described after this summary was written";
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      summarizeDay(slug, day.date);
+    });
+  }
+
+  const text = document.createElement("p");
+  text.className = "daily-text";
+  if (day.summary) {
+    text.append(...describe(day.summary));
+  } else {
+    text.classList.add("empty");
+    text.textContent = day.today
+      ? "Written once the day is over."
+      : day.described
+        ? "No summary of this day yet."
+        : "No descriptions to summarize.";
+  }
+  return { button, text };
+}
+
+// The library, narrowed to one camera, opens each past day with what the
+// model made of it. One request per day heading, only while summaries are on.
+function addDaySummaries() {
+  const slug = lib.filters.camera;
+  if (!daily.enabled || !slug) return;
+  const today = localDate(new Date().toISOString());
+  for (const heading of el("library-grid").querySelectorAll("h3.day[data-date]")) {
+    const date = heading.dataset.date;
+    const next = heading.nextElementSibling;
+    if (date >= today || (next && next.classList.contains("day-summary"))) continue;
+    const block = document.createElement("div");
+    block.className = "day-summary";
+    block.dataset.slug = slug;
+    block.dataset.date = date;
+    block.hidden = true;
+    heading.after(block);
+    loadDaySummary(block, slug, date);
+  }
+}
+
+async function loadDaySummary(block, slug, date) {
+  try {
+    const day = await getJSON(`/api/daily/${encodeURIComponent(slug)}/${date}`);
+    fillDaySummary(block, slug, day);
+  } catch (err) {
+    block.remove();
+  }
+}
+
+function fillDaySummary(block, slug, day) {
+  // A day with nothing described has nothing to say, here of all places.
+  if (!day.summary && !day.described) {
+    block.hidden = true;
+    return;
+  }
+  const { button, text } = daySummaryContent(slug, day);
+  block.replaceChildren(text, ...(button ? [button] : []));
+  block.hidden = false;
+}
+
+function removeDaySummaries() {
+  for (const block of document.querySelectorAll(".day-summary")) block.remove();
+}
+
+function refreshDayBlocks(slug, date) {
+  const selector = `.day-summary[data-slug="${cssEscape(slug)}"][data-date="${date}"]`;
+  for (const block of document.querySelectorAll(selector)) loadDaySummary(block, slug, date);
+}
+
 async function summarizeDay(slug, date) {
   const key = `${slug}|${date}`;
   if (days.busy.has(key)) return;
   days.busy.add(key);
   renderDays();
+  refreshDayBlocks(slug, date);
   try {
     const result = await post(`/api/daily/${encodeURIComponent(slug)}/${date}`, {});
     if (result.status === "ok") mergeDay(slug, result.day);
@@ -3030,6 +3097,7 @@ async function summarizeDay(slug, date) {
   } finally {
     days.busy.delete(key);
     renderDays();
+    refreshDayBlocks(slug, date);
   }
 }
 

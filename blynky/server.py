@@ -367,6 +367,18 @@ async def camera_days(request):
     return web.json_response(page)
 
 
+async def camera_day(request):
+    """Return one camera's day, for the library's heading over that day."""
+    monitor = request.app["monitor"]
+    day = daily.parse_day(request.match_info["day"])
+    if day is None:
+        raise web.HTTPBadRequest(reason="day must be YYYY-MM-DD")
+    entry = monitor.daily.day(
+        monitor.library.all(), request.match_info["slug"], day.isoformat()
+    )
+    return web.json_response(entry)
+
+
 async def summarize_day(request):
     """Write the summary for one camera's day, and return it."""
     monitor = request.app["monitor"]
@@ -501,6 +513,7 @@ def create_app(monitor):
     app.router.add_post("/api/daily/backfill", daily_backfill)
     app.router.add_delete("/api/daily/backfill", daily_backfill)
     app.router.add_get("/api/daily/{slug}", camera_days)
+    app.router.add_get("/api/daily/{slug}/{day}", camera_day)
     app.router.add_post("/api/daily/{slug}/{day}", summarize_day)
     app.router.add_get("/api/ntfy", ntfy)
     app.router.add_post("/api/ntfy", ntfy)

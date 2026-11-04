@@ -1320,6 +1320,22 @@ span.toast-thumb { display: grid; place-items: center; color: var(--muted); }
   backdrop-filter: blur(8px);
 }
 .library-grid .day:first-child { margin-top: 0; }
+/* What the model made of the day, under its heading, when the library is
+   showing one camera. */
+.library-grid .day-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.library-grid .day-summary[hidden] { display: none; }
+.day-summary .daily-text { flex: 1; margin: 0; }
+.day-summary .btn { flex-shrink: 0; }
 
 .tile {
   background: var(--panel);

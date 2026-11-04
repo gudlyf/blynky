@@ -185,6 +185,11 @@ class Daily:
         ]
         return {"days": page, "more": len(ordered) > limit}
 
+    def day(self, all_records, slug, day):
+        """Return one camera's day as days() lists it."""
+        records = self._group(all_records, slug).get((slug, day), [])
+        return self._day(slug, day, records, today().isoformat())
+
     def pending(self, all_records):
         """Return the past days that could have a summary and have none.
 

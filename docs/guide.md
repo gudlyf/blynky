@@ -235,8 +235,10 @@ it alongside the tokens). It is chmod 600 and gitignored.
 ## Daily summaries
 
 Off until you turn it on under **Daily summaries** in the settings menu (or set
-`DAILY_SUMMARIES=1`). Once it is on, a busy camera's day can be read in four
-sentences instead of fifty clip descriptions:
+`DAILY_SUMMARIES=1`). Once it is on, a busy camera's day can be read in two or
+three sentences instead of fifty clip descriptions. A summary is the gist of the
+day, such as "a quiet morning, yard work through the afternoon", and not a log
+with exact times. The clips themselves are a click away in the library:
 
 - **Yesterday, unasked.** After `DAILY_HOUR` (1 a.m. by default) the server
   sends each camera's descriptions from the day before to the model and keeps
@@ -248,6 +250,9 @@ sentences instead of fifty clip descriptions:
   which costs one request. A summary written before more of that day's clips
   were described gets an **Update** button. Today is never summarized, because
   it is not over yet. The day's name opens that day in the library.
+- **In the library.** With the library narrowed to one camera, each past day
+  opens with its summary under the day's heading, or a **Summarize** button
+  when it has none.
 - **Every past day at once.** **Summarize N past days…** in the settings menu
   writes the rest. It asks first, and says how many clip descriptions, how many
   requests and roughly how many tokens that would be. Over a long archive that

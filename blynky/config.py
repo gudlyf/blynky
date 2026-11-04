@@ -253,20 +253,23 @@ DAILY_MAX_CLIPS = int(os.environ.get("DAILY_MAX_CLIPS", "300"))
 # reason as BACKFILL_PAUSE: live motion shares the model.
 DAILY_PAUSE = float(os.environ.get("DAILY_PAUSE", "2"))
 
+# A digest, not a log: the clips themselves are a click away in the library,
+# so this should read as the gist of the day rather than a list of times.
 DAILY_SYSTEM_PROMPT = (
     "You write a short daily digest for one home security camera, from the "
-    "descriptions of each motion clip it recorded that day. Be brief and "
-    "factual. Group routine, repeated activity - passing cars, swaying "
-    "plants, nothing of note - into a phrase rather than listing it, and call "
-    "out what someone would want to know: people at or near the house, "
-    "deliveries, animals, anything unusual, with rough times written the way "
-    "they are given. Use only what "
-    "the descriptions say; do not guess at intent or identity. Plain prose: "
-    "no preamble, headings, lists or closing commentary."
+    "descriptions of each motion clip it recorded that day. Give the general "
+    "picture of the day - what kinds of activity there were and roughly when, "
+    "in broad terms like morning, afternoon or evening - not a timeline of "
+    "individual clips. Do not give exact times, and do not list every event: "
+    "fold routine, repeated activity such as passing cars, wildlife or "
+    "nothing of note into a phrase, and mention people, deliveries or "
+    "anything unusual only in general terms. Use only what the descriptions "
+    "say; do not guess at intent or identity. Plain prose: no preamble, "
+    "headings, lists or closing commentary."
 )
 
 DAILY_PROMPT = (
-    "Summarize this camera's day in at most four sentences. Reply with the "
+    "Summarize this camera's day in two or three sentences. Reply with the "
     "summary and nothing else."
 )
 
