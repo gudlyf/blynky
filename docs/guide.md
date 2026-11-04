@@ -7,6 +7,7 @@ behaves, where things are kept, and why it works the way it does.
 - [How old the stills are](#how-old-the-stills-are)
 - [The library](#the-library)
 - [The timeline](#the-timeline)
+- [Daily summaries](#daily-summaries)
 - [What the model saw](#what-the-model-saw)
 - [Using Gemini as an alternative model](#using-gemini-as-an-alternative-model)
 - [Notifications](#notifications)
@@ -27,8 +28,8 @@ behaves, where things are kept, and why it works the way it does.
 - **Grid** — every camera's most recent still, refreshed each poll, with the
   last thing it saw written underneath. `Disarmed` and `Offline` are flagged on
   the picture. Click any card to isolate it.
-- **Camera view** — the still or clip, the description, and that camera's own
-  recent motion. The arrows beside it (or `←` `→`) step through the cameras,
+- **Camera view** — the still or clip, the description, that camera's own
+  recent motion and, when they are on, its [daily summaries](#daily-summaries). The arrows beside it (or `←` `→`) step through the cameras,
   and the library icon opens the archive already filtered to this one.
 - **On motion** — the camera is isolated automatically, its still and clip are
   shown, and the description appears below once the model responds. The card
@@ -45,7 +46,9 @@ behaves, where things are kept, and why it works the way it does.
 
 The address follows the view — `#/camera/<slug>`, `#/library` with its
 filters in the query — so Back and Forward move between views, a reload lands
-where it was, and a camera or a filtered search can be bookmarked. On a phone,
+where it was, and a camera or a filtered search can be bookmarked.
+`#/event/<id>` opens one capture in the library; it is what a notification
+links to. On a phone,
 Back closes the full-screen viewer rather than leaving the page.
 
 While the tab is in the background, the number of motion events since it was
@@ -53,10 +56,11 @@ last looked at is shown in its title.
 
 ### Settings
 
-The sliders icon in the header holds choices that belong to the browser
-rather than the server, so a wall display and a phone can differ. They are
+Most of what the sliders icon in the header holds belongs to the browser
+rather than the server, so a wall display and a phone can differ. Those are
 kept in that browser's local storage along with *Follow motion* and *People
-only*.
+only*. **Push notifications** and **Daily summaries** are the exceptions: the
+server acts on them, so a change there holds for everyone.
 
 - **Theme** — follow the system, or force light or dark.
 - **Chime on motion** — a short, soft bell whenever a camera reports new
@@ -71,11 +75,11 @@ only*.
   for a tablet on the wall.
 - **Push notifications** — pause the ntfy notifications for 1 hour up to 3
   days, or until turned back on; see [Notifications](#notifications). Only
-  shown when `NTFY_URL` is set, and unlike the rest of this menu it is not
-  per browser.
-- **Daily summaries** — turn on a short summary of each camera's day, and
-  backfill the days that have none; see [Daily summaries](#daily-summaries).
-  Also the server's setting, not the browser's.
+  shown when `NTFY_URL` is set.
+- **Daily summaries** — turn on a short summary of each camera's day, choose
+  whether each night's are sent to ntfy (**Send to ntfy**, shown when
+  `NTFY_URL` is set), and backfill the days that have none; see
+  [Daily summaries](#daily-summaries).
 - **Known people…** — see [Known people](#known-people).
 - **Full screen**, and **Keyboard shortcuts**.
 - **Report a bug…** — opens a new GitHub issue with your Blynky, blinkpy and
@@ -146,6 +150,7 @@ data/
                        <timestamp>.json     sidecar describing the capture
   stills/<camera-slug>/<timestamp>.jpg      every still the Refresh button took
   latest/<camera-slug>.jpg                  the picture the grid is showing now
+  daily/<camera-slug>/<YYYY-MM-DD>.json     that camera's summary of that day
 ```
 
 Each capture's still also gets a `<timestamp>-thumb.jpg` beside it: a 480×270
@@ -163,7 +168,9 @@ searchable across the descriptions and by [tag](#tags). **Up to** jumps back to 
 showing that day and everything before it, without scrolling through
 everything since. Clicking a capture opens it full-size — clips play in place,
 and the arrow keys (or a swipe, on a touch screen) walk the archive without
-leaving the viewer.
+leaving the viewer. Narrowed to one camera while
+[daily summaries](#daily-summaries) are on, each past day opens with that
+day's summary under its heading.
 
 The JSON sidecars are what make the archive survive a restart. Each one records
 the capture's real timestamp, camera and description alongside its media, so
@@ -228,6 +235,11 @@ record. Cards show a `disarmed` badge so this is visible rather than puzzling.
 
 `MAX_TOKENS` is generous because reasoning models spend tokens thinking before
 answering; too small a budget yields an empty response rather than an error.
+The log tells the two failures apart. `vision model ran out of tokens - raise
+MAX_TOKENS` means the model hit the budget (`finish_reason=length`), and
+raising it is the fix. `vision model returned no usable reply
+(finish_reason=stop)` means it finished but said nothing usable, and shows the
+start of what it did send; more tokens will not help there.
 
 `.blink_creds.json` contains your Blink password in plaintext (blinkpy stores
 it alongside the tokens). It is chmod 600 and gitignored.
@@ -277,7 +289,8 @@ summarize.
 
 Summaries are kept in `data/daily/<camera>/<date>.json`. Retention never
 removes them, so a day's summary is still there after its footage has been
-pruned.
+pruned. The two switches are kept in `data/daily.json`, so a restart
+remembers them.
 
 A day runs midnight to midnight **in the server's time zone**. A container runs
 on UTC unless told otherwise, which ends each "day" in the evening for anyone
@@ -340,10 +353,18 @@ shown dashed until then.
 Push notifications carry the tags too. ntfy shows a tag that is an emoji name
 as the emoji — `#dog` arrives as a dog — and lists the rest under the message.
 
+A clip where nothing moved worth mentioning is described as such — "Nothing of
+note is visible…", which is what the prompt asks for. That is kept as its
+description, with no subjects, so it never notifies and is not sent to the
+model again.
+
 Clips that never got a description — the model timed out, or answered with
-nothing — are described at start-up, oldest first, and the library offers a
-button for the same thing. Each attempt is counted and a clip is dropped after
+nothing — are described at start-up, oldest first. The library offers the same
+as a **Describe N missing** button, which counts down as the run goes and comes
+back when it ends. Each attempt is counted and a clip is dropped after
 `DESCRIBE_ATTEMPTS`, so one the model can never handle is not retried forever.
+To give dropped clips another try — after switching model, say — raise
+`DESCRIBE_ATTEMPTS` for one run, press the button, and set it back.
 A description arriving for a clip captured weeks ago updates the row it
 belongs to and nothing else: it does not flash a card, jump the view, or take
 the top of the timeline.
@@ -403,6 +424,10 @@ vehicles and weather, so alerting on everything would be alerting on nothing.
 An event whose subjects are unknown is never sent: waking a phone on a guess
 is how notifications end up muted. `NTFY_COOLDOWN` bounds one camera stuck
 facing a swaying branch, and the backlog sweep never notifies at all.
+
+Each night's [daily summaries](#daily-summaries) can go to the same topic as
+well, one per camera at low priority; that is the **Send to ntfy** switch
+under Daily summaries.
 
 **Push notifications** in the settings menu pauses them — for a party, a
 day of contractors, or a camera you are working on. Pick how long under
@@ -651,6 +676,9 @@ archive was backfilled from filenames long after the events happened, so mtime
 would delete almost exactly the wrong things. `latest/` is never touched; it
 holds the picture each card is showing, which is not archive. Set
 `RETAIN_DRY_RUN=1` for a run that only logs what it would remove.
+
+[Daily summaries](#daily-summaries) are not footage and are never pruned, so a
+day's summary outlives the clips it was written from.
 
 ## Docker in depth
 

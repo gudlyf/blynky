@@ -33,7 +33,8 @@ It runs on your own machine, and the descriptions come from a model on your own 
 - **Live camera grid.** Each card shows the camera's newest picture, its age, the last thing it saw, and *Disarmed* or *Offline* when that applies. You can take a fresh photo with one camera on demand.
 - **Motion clips with descriptions.** Blynky samples frames from each clip and has a vision model describe them. Each description also lists what it found (`person`, `animal`, `vehicle` or `package`), and that list drives the filters and alerts. Captures are tagged too: `#person`, `#vehicle`, `#night`, a few finer tags like `#dog` or `#delivery`, and the names of people it recognises (or `#unknown` when it doesn't).
 - **A full library.** Every clip and still is saved, grouped by day and searchable by text or `#tag`. You can filter by camera or by what was seen, and jump to any date.
-- **Phone alerts through [ntfy](https://ntfy.sh).** An alert carries the description and a frame from the clip. You choose which subjects trigger one, there's a cooldown for each camera, and you can pause alerts from the UI.
+- **Phone alerts through [ntfy](https://ntfy.sh).** An alert carries the description and a frame from the clip, and tapping it can open that capture in Blynky. You choose which subjects trigger one, there's a cooldown for each camera, and you can pause alerts from the UI.
+- **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions for each camera and writes a two- or three-sentence summary of it. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy each night. Past days can be summarized one at a time or all at once, with a warning about token use first.
 - **Known people (optional).** Tag a person in a few captures and the model will guess who later visitors are ("Looks like Alex"). Recognised people can get quieter alerts, or none at all.
 - **Catches what polling misses.** **Sync now** pulls recent clips from the cloud and from the sync modules' storage, including clips recorded while Blynky wasn't running.
 - **Copes with Blink changes.** Cameras renamed, re-added or moved between systems are picked up without a restart, and their history stays with them.
@@ -49,7 +50,7 @@ flowchart LR
     O -- description + subjects --> M
     M -- clips, stills, sidecars --> D[(./data)]
     M -- WebSocket --> UI[Browser UI]
-    M -. person seen .-> N[ntfy → phone]
+    M -. person seen,<br>daily summary .-> N[ntfy → phone]
 ```
 
 Blink has no push API, so Blynky polls, no more often than once a minute so it doesn't overload Blink's servers. Expect motion to show up tens of seconds after it happens, because the clip has to finish uploading to Blink first.
@@ -99,10 +100,10 @@ tailscale serve --bg --https=443 8080
 
 Never expose it to the open internet, for example with `tailscale funnel` or a port forward. [Reaching it from other devices](docs/guide.md#reaching-it-from-other-devices) compares the options.
 
-Keep two more things in mind:
+Keep these in mind too:
 
 - **The credentials file.** `.blink_creds.json` holds your Blink password in plain text next to the tokens, because blinkpy stores it that way. Blynky makes it readable only by you (`chmod 600`), and `.gitignore` and `.dockerignore` both exclude it.
-- **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. Use a long, random topic name or a self-hosted ntfy server.
+- **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. With **Send to ntfy** on, so does a summary of each camera's day. Use a long, random topic name or a self-hosted ntfy server.
 - **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet: the link goes to a server with no login. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
 
 ## Configuration
@@ -145,13 +146,19 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `BACKFILL` | `1` | At start-up, describe saved clips that have no description |
 | `BACKFILL_PAUSE` | `2` | Seconds between clips while working through that backlog |
 | `DESCRIBE_ATTEMPTS` | `3` | Give up on a clip after this many failed attempts |
+
+</details>
+
+<details>
+<summary><strong>Daily summaries</strong></summary>
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
 | `DAILY_SUMMARIES` | unset | `1` turns on a short summary of each camera's day. The switch in the settings menu overrides this once used. See the [guide](docs/guide.md#daily-summaries) |
-| `NTFY_DAILY` | unset | `1` pushes each night's daily summaries to ntfy. The **Send to ntfy** switch in the settings menu overrides this once used |
-| `NTFY_DAILY_PRIORITY` | `2` | ntfy priority for those summaries. Low, so they arrive without a sound |
 | `DAILY_HOUR` | `1` | Hour, server time, after which yesterday is summarized |
 | `DAILY_MAX_CLIPS` | `300` | Most clip descriptions one day's summary is written from |
 | `DAILY_PAUSE` | `2` | Seconds between days while backfilling summaries |
-| `TZ` | UTC in Docker | Time zone the days are split in, such as `America/New_York` |
+| `TZ` | UTC in Docker | Time zone the days are split in, such as `America/New_York`. Set it, or under Docker each day ends at midnight UTC |
 
 </details>
 
@@ -164,13 +171,17 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `NTFY_SUBJECTS` | `person` | Subjects that trigger an alert: `person`, `animal`, `vehicle`, `package` |
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |
 | `NTFY_COOLDOWN` | `120` | Seconds before the same camera may alert again |
+| `NTFY_TIMEOUT` | `15` | Seconds before giving up on reaching the ntfy server |
 | `BLYNKY_URL` | unset | Address your phone reaches Blynky at, such as `https://blynky.your-tailnet.ts.net`. When set, tapping a notification opens that capture. See [Security](#security) |
 | `IDENTIFY` | `1` | Guess who a person is, once people have been tagged |
 | `IDENTIFY_MIN_CONFIDENCE` | `high` | Least confidence that counts as a match (`low`, `medium`, `high`) |
 | `MAX_REFERENCES` | `5` | Reference frames kept per person |
 | `IDENTIFY_MAX_IMAGES` | `12` | Reference frames sent in one identification |
+| `IDENTIFY_TIMEOUT` | `240` | Seconds before giving up on an identification |
 | `NTFY_KNOWN_PRIORITY` | `2` | Priority when everyone seen is recognised |
 | `NTFY_SKIP_KNOWN` | `0` | `1` sends nothing when everyone seen is recognised |
+| `NTFY_DAILY` | unset | `1` pushes each night's daily summaries to ntfy. The **Send to ntfy** switch in the settings menu overrides this once used |
+| `NTFY_DAILY_PRIORITY` | `2` | ntfy priority for those summaries. Low, so they arrive without a sound |
 
 </details>
 
@@ -203,6 +214,9 @@ data/
   stills/<camera>/<timestamp>.jpg         photos taken on demand
   latest/<camera>.jpg                     the picture each card shows
   people/<person>/                        reference frames for known people
+  daily/<camera>/<YYYY-MM-DD>.json        one camera's summary of one day
+  cameras.json                            every name each camera has had
+  ntfy.json, daily.json                   settings changed from the settings menu
 ```
 
 `scripts/rename_camera.py` moves a camera's existing archive to its new name. See [Refiling what was already captured](docs/guide.md#refiling-what-was-already-captured).
@@ -214,6 +228,8 @@ The **[guide](docs/guide.md)** covers each part in depth:
 - the UI and its [keyboard shortcuts](docs/guide.md#keyboard-shortcuts)
 - why stills can be [hours or months old](docs/guide.md#how-old-the-stills-are)
 - [how identification works](docs/guide.md#known-people), and why it isn't face recognition
+- [daily summaries](docs/guide.md#daily-summaries): what is sent to the model, when, and what it costs
+- [opening a capture from a notification](docs/guide.md#opening-the-capture-from-a-notification)
 - [where Blink keeps a clip](docs/guide.md#where-blink-keeps-a-clip-and-the-sync-now-button) and what **Sync now** recovers
 - the [Docker build](docs/guide.md#docker-in-depth) and how blinkpy is pinned
 
