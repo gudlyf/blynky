@@ -54,8 +54,9 @@ To try the Docker build, run `docker compose up -d --build`.
 ### Things to keep in mind
 
 - **Don't break existing archives.** People have months of captures in
-  `DATA_DIR`. The sidecar JSON, the folder layout and `cameras.json` must keep
-  reading what older versions wrote.
+  `DATA_DIR`. The sidecar JSON, the folder layout, `cameras.json`, the daily
+  summaries under `daily/` and the settings in `ntfy.json` and `daily.json`
+  must keep reading what older versions wrote.
 - **Go easy on Blink.** Don't poll more often than once a minute, and don't
   wake battery cameras unless the user asked for it.
 - **blinkpy changes go on the fork's `blynky` branch.** If a fix belongs in
