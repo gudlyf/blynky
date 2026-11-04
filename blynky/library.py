@@ -141,6 +141,9 @@ def make_record(kind, camera, slug, stamp, **extra):
         # Stills only: what the image hashed to, so an unchanged picture is
         # recognised as one we already hold.
         "digest": None,
+        # Someone marked this one as worth keeping. Retention never deletes a
+        # starred capture.
+        "starred": False,
         "bytes": 0,
     }
     record.update(extra)
@@ -478,6 +481,7 @@ def _record_from_parts(kind, slug, prefix, parts, names):
     record["tags"] = tags_for(record)
 
     record["digest"] = stored.get("digest")
+    record["starred"] = stored.get("starred") is True
     record["bytes"] = sum(size for _, size in parts.values())
     return record
 
@@ -610,6 +614,7 @@ class Library:
         cursor=None,
         limit=60,
         until=None,
+        starred=False,
     ):
         """Page through the archive, newest first.
 
@@ -626,6 +631,8 @@ class Library:
             if camera and record["slug"] != camera:
                 continue
             if kind and record["kind"] != kind:
+                continue
+            if starred and not record["starred"]:
                 continue
             if subject and subject not in (record["subjects"] or ()):
                 continue
@@ -672,6 +679,7 @@ class Library:
             "clips": clips,
             "stills": stills,
             "motion": len(self._records) - stills,
+            "starred": sum(1 for record in self._records if record["starred"]),
             "bytes": sum(record["bytes"] for record in self._records),
             "oldest": self._records[-1]["stamp"] if self._records else None,
             "newest": self._records[0]["stamp"] if self._records else None,

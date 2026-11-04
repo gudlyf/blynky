@@ -49,7 +49,7 @@ const days = { slug: null, list: [], more: false, loading: false, busy: new Set(
 
 // The library view is a separate, paged read of everything on disk. It keeps
 // its own list because the live feed above is only ever the recent tail.
-const NO_FILTERS = { camera: "", kind: "", subject: "", q: "", until: "" };
+const NO_FILTERS = { camera: "", kind: "", subject: "", q: "", until: "", starred: "" };
 
 const lib = {
   open: false,
@@ -1099,6 +1099,7 @@ async function loadStats() {
     parts.push(humanBytes(stats.bytes));
     if (stats.oldest) parts.push(`since ${shortTime(stats.oldest)}`);
     el("library-stats").textContent = parts.join(" · ");
+    el("starred-count").textContent = stats.starred ? String(stats.starred) : "";
   } catch (err) {
     el("library-stats").textContent = "";
   }
@@ -1133,6 +1134,7 @@ async function loadLibraryPage() {
   if (lib.filters.subject) params.set("subject", lib.filters.subject);
   if (lib.filters.q) params.set("q", lib.filters.q);
   if (lib.filters.until) params.set("until", endOfDay(lib.filters.until));
+  if (lib.filters.starred) params.set("starred", "1");
   if (lib.next) params.set("cursor", lib.next);
   params.set("limit", String(state.pageSize));
 
@@ -1179,9 +1181,11 @@ function appendLibrary(records) {
   }
   addDaySummaries();
   el("library-empty").hidden = lib.items.length > 0;
-  el("library-empty").textContent = hasFilters()
-    ? "Nothing matches these filters."
-    : "Nothing saved yet.";
+  el("library-empty").textContent = sameFilters(lib.filters, { ...NO_FILTERS, starred: "1" })
+    ? "Nothing starred yet. Star a capture with the star on its tile or in the viewer."
+    : hasFilters()
+      ? "Nothing matches these filters."
+      : "Nothing saved yet.";
 }
 
 function libraryTile(record) {
@@ -1212,6 +1216,7 @@ function libraryTile(record) {
     thumb.append(play);
   }
   thumb.append(pill(clockTime(record.stamp), "tile-time"));
+  thumb.append(starButton(record));
 
   const foot = document.createElement("div");
   foot.className = "tile-foot";
@@ -1307,6 +1312,7 @@ function setFilterControls() {
   el("filter-subject").value = lib.filters.subject;
   el("filter-search").value = lib.filters.q;
   el("filter-until").value = lib.filters.until;
+  el("filter-starred").setAttribute("aria-pressed", String(Boolean(lib.filters.starred)));
   el("filter-clear").hidden = !hasFilters();
 }
 
@@ -1321,9 +1327,83 @@ function applyFilters() {
   lib.filters.subject = el("filter-subject").value;
   lib.filters.q = el("filter-search").value.trim();
   lib.filters.until = el("filter-until").value;
+  el("filter-starred").setAttribute("aria-pressed", String(Boolean(lib.filters.starred)));
   el("filter-clear").hidden = !hasFilters();
   syncHistory("replace");
   reloadLibrary();
+}
+
+function toggleStarredFilter() {
+  lib.filters.starred = lib.filters.starred ? "" : "1";
+  applyFilters();
+}
+
+// ------------------------------------------------------------------ starring
+
+// The star on a tile: always shown once starred, otherwise on hover - and
+// always on a touch screen, which has no hover to reveal it.
+function starButton(record) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tile-star star-btn";
+  button.append(icon("star"));
+  setStar(button, record.starred);
+  button.addEventListener("click", (e) => {
+    // The tile itself opens the viewer; the star must not.
+    e.stopPropagation();
+    toggleStar(record.id);
+  });
+  button.addEventListener("keydown", (e) => e.stopPropagation());
+  return button;
+}
+
+function setStar(button, starred) {
+  button.setAttribute("aria-pressed", String(Boolean(starred)));
+  button.setAttribute("aria-label", starred ? "Unstar" : "Star");
+  button.title = starred ? "Starred - kept whatever its age. Click to unstar" : "Star";
+}
+
+// Flip the star at once and tell the server; put it back if that fails. The
+// server's broadcast then reaches every other open page.
+async function toggleStar(id) {
+  const at = indexOf(id);
+  if (at < 0) return;
+  const record = lib.items[at];
+  const starred = !record.starred;
+  applyStar({ ...record, starred });
+  try {
+    const response = await fetch(`/api/library/event/${encodeURIComponent(id)}/star`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ starred }),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    applyStar(await response.json());
+  } catch (err) {
+    applyStar({ ...record, starred: !starred });
+    showMessage(
+      starred ? "Could not star this capture" : "Could not unstar this capture",
+      "The server is unreachable."
+    );
+  }
+}
+
+// A star changed, here or on another page. Unstarring under the Starred
+// filter leaves the tile in place, so a slip is one click to undo; it is
+// gone on the next reload.
+function applyStar(record) {
+  const at = indexOf(record.id);
+  if (at < 0) {
+    // Starred somewhere this page has not loaded: it belongs in a starred
+    // list, but in date order, which a reload gets right.
+    if (lib.filters.starred) lib.stale = true;
+    return;
+  }
+  lib.items[at].starred = record.starred;
+  const tile = document.querySelector(`.tile[data-id="${cssEscape(record.id)}"] .tile-star`);
+  if (tile) setStar(tile, record.starred);
+  if (lib.viewing === at) setStar(el("viewer-star"), record.starred);
+  if (lib.open) loadStats();
 }
 
 function clearFilters() {
@@ -1383,6 +1463,8 @@ function openViewer(index) {
     img.alt = `${record.camera} at ${fullTime(record.stamp)}`;
     img.hidden = false;
   }
+
+  setStar(el("viewer-star"), record.starred);
 
   const download = el("viewer-download");
   download.href = record.clip || record.image || "#";
@@ -2305,8 +2387,9 @@ function mergeIntoLibrary(record) {
 }
 
 function matchesFilters(record) {
-  const { camera, kind, subject, q, until } = lib.filters;
+  const { camera, kind, subject, q, until, starred } = lib.filters;
   if (camera && record.slug !== camera) return false;
+  if (starred && !record.starred) return false;
   if (kind && record.kind !== kind) return false;
   if (subject && !(record.subjects || []).includes(subject)) return false;
   if (until && new Date(record.stamp) > new Date(endOfDay(until))) return false;
@@ -2441,6 +2524,11 @@ function connect() {
       return;
     }
 
+    if (data.type === "star") {
+      applyStar(data.event);
+      return;
+    }
+
     if (data.type === "capture") {
       // A newly saved still: nothing to isolate, but the library should show
       // it without a reload.
@@ -2529,6 +2617,7 @@ function filtersFrom(params) {
     subject: allowed("filter-subject", params.get("subject") || ""),
     q: params.get("q") || "",
     until: /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : "",
+    starred: params.get("starred") === "1" ? "1" : "",
   };
 }
 
@@ -3300,6 +3389,10 @@ el("open-library").addEventListener("click", () => {
 el("library-more").addEventListener("click", loadLibraryPage);
 el("filter-camera").addEventListener("change", applyFilters);
 el("filter-kind").addEventListener("change", applyFilters);
+el("filter-starred").addEventListener("click", toggleStarredFilter);
+el("viewer-star").addEventListener("click", () => {
+  if (lib.viewing !== null) toggleStar(lib.items[lib.viewing].id);
+});
 el("filter-subject").addEventListener("change", applyFilters);
 el("filter-until").addEventListener("change", applyFilters);
 el("filter-clear").addEventListener("click", clearFilters);
@@ -3433,6 +3526,7 @@ document.addEventListener("keydown", (e) => {
       closeViewer();
     } else if (e.key === "ArrowLeft") stepViewer(-1);
     else if (e.key === "ArrowRight") stepViewer(1);
+    else if (e.key === "*" && !typingIn(e.target)) toggleStar(lib.items[lib.viewing].id);
     return;
   }
 

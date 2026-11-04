@@ -1387,6 +1387,39 @@ span.toast-thumb { display: grid; place-items: center; color: var(--muted); }
   bottom: 7px;
 }
 
+/* A starred capture is marked in its corner; an unstarred one offers the
+   star on hover, or always where there is no hover to reveal it. */
+.tile-star {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(10 14 18 / .6);
+  color: #fff;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.tile-star .icon { width: 16px; height: 16px; }
+.tile:hover .tile-star, .tile-star:focus-visible, .tile-star[aria-pressed="true"] { opacity: 1; }
+@media (hover: none) { .tile-star { opacity: .85; } }
+.star-btn[aria-pressed="true"] { color: var(--who); }
+.star-btn[aria-pressed="true"] .icon { fill: currentColor; }
+.star-filter[aria-pressed="true"] {
+  border-color: var(--who);
+  background: color-mix(in srgb, var(--who) 16%, var(--panel-2));
+}
+.star-filter[aria-pressed="true"] .icon { fill: var(--who); color: var(--who); }
+.star-count:not(:empty) { color: var(--muted); font-variant-numeric: tabular-nums; }
+
 .tile-foot {
   display: flex;
   flex-direction: column;

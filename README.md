@@ -32,14 +32,14 @@ It runs on your own machine, and the descriptions come from a model on your own 
 
 - **Live camera grid.** Each card shows the camera's newest picture, its age, the last thing it saw, and *Disarmed* or *Offline* when that applies. You can take a fresh photo with one camera on demand.
 - **Motion clips with descriptions.** Blynky samples frames from each clip and has a vision model describe them. Each description also lists what it found (`person`, `animal`, `vehicle` or `package`), and that list drives the filters and alerts. Captures are tagged too: `#person`, `#vehicle`, `#night`, a few finer tags like `#dog` or `#delivery`, and the names of people it recognises (or `#unknown` when it doesn't).
-- **A full library.** Every clip and still is saved, grouped by day and searchable by text or `#tag`. You can filter by camera or by what was seen, and jump to any date.
+- **A full library.** Every clip and still is saved, grouped by day and searchable by text or `#tag`. You can filter by camera or by what was seen, and jump to any date. Star the captures worth keeping, and show only those with one click.
 - **Phone alerts through [ntfy](https://ntfy.sh).** An alert carries the description and a frame from the clip, and tapping it can open that capture in Blynky. You choose which subjects trigger one, there's a cooldown for each camera, and you can pause alerts from the UI.
 - **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions for each camera and writes a two- or three-sentence summary of it. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy each night. Past days can be summarized one at a time or all at once, with a warning about token use first.
 - **Known people (optional).** Tag a person in a few captures and the model will guess who later visitors are ("Looks like Alex"). Recognised people can get quieter alerts, or none at all.
 - **Catches what polling misses.** **Sync now** pulls recent clips from the cloud and from the sync modules' storage, including clips recorded while Blynky wasn't running.
 - **Copes with Blink changes.** Cameras renamed, re-added or moved between systems are picked up without a restart, and their history stays with them.
 - **Works well as a wall display or phone app.** It has light and dark themes, keyboard shortcuts, an optional chime, desktop alerts and a keep-awake mode, and you can add it to a phone's home screen.
-- **Optional retention.** It can delete captures by age, with a dry-run mode to check first.
+- **Optional retention.** It can delete captures by age, with a dry-run mode to check first. Starred captures are never deleted.
 
 ## How it works
 
@@ -196,7 +196,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `SYNC_LIMIT` | `5` | Clips per camera that **Sync now** pulls |
 | `SYNC_DAYS` | `2` | How many days back **Sync now** searches Blink's cloud clips |
 | `CAMERA_RENAMES` | empty | `Old Name=New Name` pairs, comma-separated. See [Renaming a camera](docs/guide.md#renaming-a-camera) |
-| `RETAIN_DAYS` | `0` | Delete captures older than this. `0` keeps everything |
+| `RETAIN_DAYS` | `0` | Delete captures older than this, except starred ones. `0` keeps everything |
 | `RETAIN_DRY_RUN` | `0` | `1` logs what retention would delete, without deleting it |
 
 </details>
@@ -210,7 +210,7 @@ data/
   events/<camera>/<timestamp>.mp4         motion clip
                   <timestamp>.jpg         still
                   <timestamp>-thumb.jpg   480×270 thumbnail
-                  <timestamp>.json        sidecar: time, camera, description, subjects
+                  <timestamp>.json        sidecar: time, camera, description, subjects, star
   stills/<camera>/<timestamp>.jpg         photos taken on demand
   latest/<camera>.jpg                     the picture each card shows
   people/<person>/                        reference frames for known people

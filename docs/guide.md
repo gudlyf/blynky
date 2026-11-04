@@ -107,6 +107,7 @@ the browser's address bar.
 | `/` | Search the library |
 | `1`–`9` | Open that camera |
 | `←` `→` | Previous / next camera; in the viewer, previous / next capture |
+| `*` | In the viewer, star or unstar the capture |
 | `P` | Play the clip, or back to the still |
 | `R` | Take a new picture |
 | `S` | Sync now |
@@ -171,6 +172,23 @@ and the arrow keys (or a swipe, on a touch screen) walk the archive without
 leaving the viewer. Narrowed to one camera while
 [daily summaries](#daily-summaries) are on, each past day opens with that
 day's summary under its heading.
+
+### Starred captures
+
+The star in a tile's corner, or in the viewer's header (`*` on a keyboard),
+marks a capture worth keeping. It shows on hover until it is set, and always
+on a touch screen. **Starred** in the library's filter bar, with a count
+beside it, shows only the starred ones. It combines with the other filters, so
+"starred, front door, people only" works, and `#/library?starred=1` is a
+bookmark to that list.
+
+A star is the server's, not the browser's: it is saved in the capture's
+sidecar as `"starred": true`, every open page sees it change, and it survives
+a restart and `scripts/rename_camera.py`. Unstarring something while the
+Starred filter is on leaves its tile in place until the list is reloaded, so a
+slip is one click to undo.
+
+Starred captures are exempt from [retention](#retention).
 
 The JSON sidecars are what make the archive survive a restart. Each one records
 the capture's real timestamp, camera and description alongside its media, so
@@ -666,9 +684,18 @@ and running it again carries on from there.
 
 By default nothing is ever deleted; expect an active set of cameras to add
 roughly a gigabyte every two weeks.
-`RETAIN_DAYS` deletes captures older than that many days — age only, whatever
+`RETAIN_DAYS` deletes captures older than that many days — by age, whatever
 is in them, so what is on disk follows from the calendar rather than from what
-a model once said. It defaults to `0`, meaning keep everything: upgrading must
+a model once said. The one exception is a capture someone
+[starred](#starred-captures): that is a person saying "keep this", and it is
+kept however old it gets, until it is unstarred. Nothing else in Blynky
+deletes captures on its own, and this rule has no setting to turn it off. The
+star is checked when the sweep starts and again, against the sidecar on disk,
+immediately before each capture's files are deleted. So a star set while a
+sweep is running still counts, and so does one written into a sidecar by
+hand. A capture whose sidecar cannot be read is kept as well, since there is
+no telling whether it was starred. The log says what was kept and why, and
+the dry run reports how many starred captures it is keeping. It defaults to `0`, meaning keep everything: upgrading must
 not start deleting footage on its own.
 
 Age is read from the capture's own timestamp, never the file's mtime — this

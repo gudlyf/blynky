@@ -205,6 +205,7 @@ async def archive(request):
         cursor=query.get("cursor") or None,
         limit=limit,
         until=until,
+        starred=query.get("starred") == "1",
     )
     return web.json_response(page)
 
@@ -215,6 +216,21 @@ async def archive_event(request):
     if record is None:
         raise web.HTTPNotFound(reason="unknown capture")
     return web.json_response(record)
+
+
+async def star_event(request):
+    """Star or unstar one capture. POST {"starred": true} or false."""
+    monitor = request.app["monitor"]
+    record = monitor.library.find(request.match_info["event_id"])
+    if record is None:
+        raise web.HTTPNotFound(reason="unknown capture")
+    try:
+        body = await request.json()
+    except ValueError:
+        raise web.HTTPBadRequest(reason="expected JSON") from None
+    if not isinstance(body, dict) or not isinstance(body.get("starred"), bool):
+        raise web.HTTPBadRequest(reason="starred must be true or false")
+    return web.json_response(await monitor.set_starred(record, body["starred"]))
 
 
 async def archive_stats(request):
@@ -505,6 +521,7 @@ def create_app(monitor):
     app.router.add_get("/api/library", archive)
     app.router.add_get("/api/library/stats", archive_stats)
     app.router.add_get("/api/library/event/{event_id}", archive_event)
+    app.router.add_post("/api/library/event/{event_id}/star", star_event)
     app.router.add_get("/api/people", known_people)
     app.router.add_post("/api/people", enroll)
     app.router.add_delete("/api/people/{slug}", forget_person)

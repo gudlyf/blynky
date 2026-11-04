@@ -1362,6 +1362,13 @@ class Monitor:
         if not backfill:
             await notify.send(self.session, event, image=images[-1] if images else None)
 
+    async def set_starred(self, record, starred):
+        """Star or unstar one capture, save it, and tell every browser."""
+        record["starred"] = bool(starred)
+        await library.write_sidecar(record)
+        self._broadcast({"type": "star", "event": record})
+        return record
+
     async def confirm_person(self, record, name):
         """Record that somebody has confirmed who is in one capture.
 
