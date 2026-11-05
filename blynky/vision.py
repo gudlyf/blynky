@@ -493,7 +493,7 @@ def parse_digest(text):
 
 
 async def summarize_day(session, camera, day, lines, group=None):
-    """Ask the model for a short account of one camera's day.
+    """Ask the model for a short account of one camera or a group of cameras.
 
     `day` is a date, `lines` the day's descriptions as "HH:MM text", oldest
     first. With `group` - a heading such as "Location: Home" - the lines come
