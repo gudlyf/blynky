@@ -153,12 +153,29 @@
          written by the server, from every camera's descriptions. -->
     <div class="menu-sep"></div>
     <label class="switch menu-row"
-           title="Once a day, send each camera's clip descriptions to the model for a short summary of its day. Applies to everyone, not just this browser">
+           title="Once a day, send the day's clip descriptions to the model for a short summary of each camera, location or the whole day, as chosen below. Applies to everyone, not just this browser">
       <input type="checkbox" id="daily-on" role="switch">
       <span>Daily summaries</span>
     </label>
+    <div id="daily-scopes" hidden>
+      <label class="switch menu-row menu-indent"
+             title="A summary of each camera's day, shown on its page and atop each day when the library shows that camera">
+        <input type="checkbox" role="switch" data-daily-scope="camera">
+        <span>Each camera</span>
+      </label>
+      <label class="switch menu-row menu-indent" id="daily-scope-location-row" hidden
+             title="One summary per Blink system, of all its cameras together, shown atop each day in the unfiltered library">
+        <input type="checkbox" role="switch" data-daily-scope="location">
+        <span>Each location</span>
+      </label>
+      <label class="switch menu-row menu-indent"
+             title="One summary of every camera together, shown atop each day in the unfiltered library">
+        <input type="checkbox" role="switch" data-daily-scope="all">
+        <span>All cameras together</span>
+      </label>
+    </div>
     <label class="switch menu-row menu-indent" id="daily-notify-row" hidden
-           title="Push each camera's summary of yesterday to ntfy as it is written, at low priority. Backfilled days are never sent">
+           title="Push each summary of yesterday to ntfy as it is written, at low priority. Backfilled days are never sent">
       <input type="checkbox" id="daily-notify" role="switch">
       <span>Send to ntfy</span>
     </label>

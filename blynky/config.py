@@ -240,6 +240,18 @@ DAILY_DIR = DATA_DIR / "daily"
 # been used it wins over DAILY_SUMMARIES.
 DAILY_STATE = DATA_DIR / "daily.json"
 
+# What gets a summary: "camera" (each camera), "location" (each Blink system,
+# all its cameras together) and "all" (every camera together), comma separated,
+# in any combination. The settings menu has these too, and wins once used.
+DAILY_SCOPES = [
+    scope
+    for scope in (
+        part.strip().lower()
+        for part in os.environ.get("DAILY_SCOPES", "camera").split(",")
+    )
+    if scope in ("camera", "location", "all")
+] or ["camera"]
+
 # Push each camera's summary of yesterday to ntfy as it is written. The
 # settings menu has a switch for this too, which wins once used. Only the
 # summary written unasked each night is sent - never a backfill, which would
@@ -264,14 +276,16 @@ DAILY_PAUSE = float(os.environ.get("DAILY_PAUSE", "2"))
 # A digest, not a log: the clips themselves are a click away in the library,
 # so this should read as the gist of the day rather than a list of times.
 DAILY_SYSTEM_PROMPT = (
-    "You write a short daily digest for one home security camera, from the "
-    "descriptions of each motion clip it recorded that day. Give the general "
-    "picture of the day - what kinds of activity there were and roughly when, "
-    "in broad terms like morning, afternoon or evening - not a timeline of "
-    "individual clips. Do not give exact times, and do not list every event: "
-    "fold routine, repeated activity such as passing cars, wildlife or "
-    "nothing of note into a phrase, and mention people, deliveries or "
-    "anything unusual only in general terms. Use only what the descriptions "
+    "You write a short daily digest for a home security system - one camera, "
+    "or several cameras together - from the descriptions of each motion clip "
+    "recorded that day. Give the general picture of the day - what kinds of "
+    "activity there were and roughly when, in broad terms like morning, "
+    "afternoon or evening - not a timeline of individual clips. Do not give "
+    "exact times, and do not list every event: fold routine, repeated "
+    "activity such as passing cars, wildlife or nothing of note into a "
+    "phrase, and mention people, deliveries or anything unusual only in "
+    "general terms. With several cameras, describe the day as a whole and "
+    "name a camera only where it matters. Use only what the descriptions "
     "say; do not guess at intent or identity. Plain prose: no preamble, "
     "headings, lists or closing commentary."
 )
@@ -279,6 +293,11 @@ DAILY_SYSTEM_PROMPT = (
 DAILY_PROMPT = (
     "Summarize this camera's day in two or three sentences. Reply with the "
     "summary and nothing else."
+)
+
+DAILY_GROUP_PROMPT = (
+    "Summarize the day across these cameras in two or three sentences. Reply "
+    "with the summary and nothing else."
 )
 
 SYSTEM_PROMPT = (

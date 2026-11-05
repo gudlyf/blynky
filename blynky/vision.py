@@ -492,21 +492,25 @@ def parse_digest(text):
     return text or None
 
 
-async def summarize_day(session, camera, day, lines):
+async def summarize_day(session, camera, day, lines, group=None):
     """Ask the model for a short account of one camera's day.
 
     `day` is a date, `lines` the day's descriptions as "HH:MM text", oldest
-    first. Returns the summary text, or None if the model could not be reached
-    or gave nothing back. Text only: no frames are sent.
+    first. With `group` - a heading such as "Location: Home" - the lines come
+    from several cameras, as "HH:MM Camera: text", and `camera` is ignored.
+    Returns the summary text, or None if the model could not be reached or
+    gave nothing back. Text only: no frames are sent.
     """
     if not lines:
         return None
 
     heading = (
-        f"Camera: {camera}\n"
+        f"{group or f'Camera: {camera}'}\n"
         f"Date: {day.strftime('%A, %B')} {day.day}, {day.year}\n"
-        f"Descriptions of the {len(lines)} motion clips it recorded, in order:\n"
+        f"Descriptions of the {len(lines)} motion clips "
+        f"{'they' if group else 'it'} recorded, in order:\n"
     )
+    prompt = config.DAILY_GROUP_PROMPT if group else config.DAILY_PROMPT
     body = {
         "model": _MODEL,
         "max_tokens": config.MAX_TOKENS,
@@ -514,7 +518,7 @@ async def summarize_day(session, camera, day, lines):
             {"role": "system", "content": config.DAILY_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": heading + "\n".join(lines) + "\n\n" + config.DAILY_PROMPT,
+                "content": heading + "\n".join(lines) + "\n\n" + prompt,
             },
         ],
     }
