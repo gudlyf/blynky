@@ -306,8 +306,8 @@ When they are written:
   under Daily summaries. While it is on, each summary of yesterday is pushed as
   it is written: one notification per summary, titled with the camera,
   location or "All cameras" and the day. Tapping it opens that day in the
-  library - narrowed to the camera, for a camera's - when `BLYNKY_URL` is set. They arrive in the small hours, so they go at low
-  priority (`NTFY_DAILY_PRIORITY`, default `2`), which ntfy delivers without a
+  library - narrowed to the camera, for a camera's - when `BLYNKY_URL` is
+  set. They arrive in the small hours, so they go at low priority (`NTFY_DAILY_PRIORITY`, default `2`), which ntfy delivers without a
   sound. Only the nightly summaries are sent. A backfill or a **Summarize**
   button never sends one, and pausing push notifications pauses these too.
 - **In the library.** With the library narrowed to one camera, each past day
@@ -471,6 +471,17 @@ facing a swaying branch, and the backlog sweep never notifies at all.
 Each night's [daily summaries](#daily-summaries) can go to the same topic as
 well, one per camera at low priority; that is the **Send to ntfy** switch
 under Daily summaries.
+
+With more than one Blink system, `NTFY_SYSTEM_TOPICS=1` sends each system's
+notifications to a topic of its own, so a phone can follow the house and not
+the cabin. The topic is the system's name, slugified, in front of
+`NTFY_URL`'s: with `NTFY_URL=https://ntfy.sh/mytopic`, the Cabin's go to
+`https://ntfy.sh/cabin-mytopic` and Home's to `https://ntfy.sh/home-mytopic`.
+(ntfy allows only letters, digits, `-` and `_` in a topic, so it cannot be
+`Cabin:mytopic`.) A daily summary of one camera or one location goes to that
+system's topic; a summary of every camera goes to `NTFY_URL` itself, as does
+anything whose system is not known. It is on whenever `SYSTEM_PREFIX` is,
+unless set to `0`, and can be turned on without it.
 
 **Push notifications** in the settings menu pauses them — for a party, a
 day of contractors, or a camera you are working on. Pick how long under
@@ -659,6 +670,34 @@ the card or drive of every sync module in the current line-up.
 The camera view shows which system each camera is in, since arming and
 disarming are per system: a camera moved into a system that is disarmed
 records nothing, however healthy it looks.
+
+### Two cameras with the same name
+
+Blink only keeps a camera's name unique within its own system, so an account
+with a house and a cabin can have a **Driveway** in each. blinkpy, and so this
+app, knows cameras by name alone, and of two with the same name it keeps one:
+the other is never polled and nothing it records is saved. blinkpy logs
+`Duplicates found during merge` when this happens.
+
+Renaming one of them in the Blink app fixes it. Or set `SYSTEM_PREFIX=1`, and
+every camera is called by its system and name together - `Home:Driveway`,
+`Cabin:Driveway` - in the grid, the library, the archive's folders
+(`home-driveway`, `cabin-driveway`) and notifications. It also turns on
+[a topic per system](#notifications) for ntfy.
+
+Turning it on renames every camera, and is handled like any other
+[rename](#renaming-a-camera): each camera's history under its old name stays
+with it, and a camera moved to another system afterwards shows up as a rename
+too. Of two cameras that shared a name, the one blinkpy was keeping inherits
+the old history, and the other starts with none. To file the old captures
+under the new names as well, start the app once with the prefix on, so it
+records the new names, then stop it and refile each camera:
+
+```bash
+python3 scripts/rename_camera.py "Driveway" "Cabin:Driveway" --data ./data --apply
+```
+
+Turning it off again is the same rename in reverse.
 
 One warning is worth expecting and ignoring:
 

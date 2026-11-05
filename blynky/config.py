@@ -135,6 +135,13 @@ CAMERA_RENAMES = dict(
     if sep and old.strip() and new.strip()
 )
 
+# Call each camera "System:Camera" - "Cabin:Driveway", "Home:Driveway" -
+# rather than by its name alone. Blink only keeps names unique within one
+# system, so an account with two systems can have two cameras of the same name,
+# and without this only one of them is seen. Off by default. Turning it on is
+# a rename of every camera, handled as any rename is: see the guide.
+SYSTEM_PREFIX = os.environ.get("SYSTEM_PREFIX") == "1"
+
 # Guess who a person is, when any have been enrolled. No people enrolled means
 # this never runs, so it costs nothing until it is used.
 IDENTIFY = os.environ.get("IDENTIFY", "1") != "0"
@@ -195,6 +202,16 @@ NTFY_URL = os.environ.get("NTFY_URL", "").strip()
 BLYNKY_URL = os.environ.get("BLYNKY_URL", "").strip().rstrip("/")
 if BLYNKY_URL and not BLYNKY_URL.startswith(("http://", "https://")):
     raise ValueError("BLYNKY_URL must start with http:// or https://")
+
+# Send each system's notifications to a topic of its own: <system>-<topic>
+# beside NTFY_URL's, such as https://ntfy.sh/cabin-mytopic, so a phone can
+# subscribe to one place and not another. ntfy allows only letters, digits,
+# - and _ in a topic name, so the system's name is slugified. Anything not tied
+# to one system, such as a summary of every camera, still goes to NTFY_URL.
+# Follows SYSTEM_PREFIX unless set.
+NTFY_SYSTEM_TOPICS = (
+    os.environ.get("NTFY_SYSTEM_TOPICS", "1" if SYSTEM_PREFIX else "0") == "1"
+)
 
 # Which subjects are worth a notification. People, by default: animals,
 # vehicles and weather are most of what these cameras see, and alerting on

@@ -452,7 +452,8 @@ class Monitor:
 
     async def _sync_snapshots(self, initial=False):
         """Write each camera's current thumbnail and tell the UI about it."""
-        for name, camera in self.blink.cameras.items():
+        for name, camera in self._blink_cameras().items():
+            system = self._system_of_sync(camera.sync)
             slug = slugify(name)
             image = camera.image_from_cache
             entry = self.cameras.setdefault(
@@ -460,7 +461,7 @@ class Monitor:
                 {
                     "name": name,
                     "slug": slug,
-                    "sync": getattr(camera.sync, "name", None),
+                    "sync": system,
                     "image": None,
                     # When the picture on screen was taken, and where it came
                     # from: Blink's stored thumbnail or a frame out of a clip.
@@ -472,7 +473,7 @@ class Monitor:
             )
             # Kept current rather than fixed at first sight: a camera moved to
             # another system, or a system renamed, changes this.
-            entry["sync"] = getattr(camera.sync, "name", None)
+            entry["sync"] = system
             entry["armed"] = bool(getattr(camera.sync, "arm", False))
             entry["online"] = bool(camera.online)
             if camera.last_record:
@@ -542,7 +543,7 @@ class Monitor:
         ):
             return {"status": "error", "message": "Not connected to Blink."}
 
-        camera = self.blink.cameras.get(name)
+        camera = self._blink_cameras().get(name)
         if camera is None:
             return {"status": "error", "message": "Unknown camera."}
         if not camera.online:
@@ -570,14 +571,55 @@ class Monitor:
 
     # -- camera names -----------------------------------------------------
 
+    def _label(self, system, name):
+        """Return what this app calls a camera: its name, or "System:Name".
+
+        The second only with SYSTEM_PREFIX, and only when the system is known.
+        """
+        if config.SYSTEM_PREFIX and system and name:
+            return f"{system}:{name}"
+        return name
+
+    def _system_of_sync(self, sync):
+        """Return the name of the Blink system a sync module belongs to.
+
+        By network id rather than the module's own name: blinkpy names a
+        Mini's or a doorbell's module after the camera, not its system.
+        """
+        network_id = getattr(sync, "network_id", None)
+        if network_id is not None:
+            name = self._current_systems().get(str(network_id))
+            if name:
+                return name
+        return getattr(sync, "name", None)
+
+    def _blink_cameras(self):
+        """Every camera blinkpy holds, keyed by what this app calls it.
+
+        blinkpy keys its own table by bare name, merged across systems, so of
+        two cameras with the same name on different systems it keeps one. With
+        SYSTEM_PREFIX each system's cameras are read from its own module
+        instead, where a name is unique, and every one of them is kept.
+        """
+        if not config.SYSTEM_PREFIX:
+            return self.blink.cameras
+        found = {}
+        for sync in self.blink.sync.values():
+            system = self._system_of_sync(sync)
+            for name, camera in (getattr(sync, "cameras", None) or {}).items():
+                found[self._label(system, name)] = camera
+        return found
+
     def _current_names(self):
-        """Map each camera id to the name Blink gives it right now."""
+        """Map each camera id to what Blink calls it right now."""
         home = self.blink.homescreen or {}
+        systems = self._current_systems()
         current = {}
         for key in ("cameras", "owls", "doorbells"):
             for device in home.get(key) or []:
                 if device.get("id") is not None and device.get("name"):
-                    current[str(device["id"])] = device["name"]
+                    system = systems.get(str(device.get("network_id")))
+                    current[str(device["id"])] = self._label(system, device["name"])
         return current
 
     def _current_systems(self):
@@ -643,7 +685,7 @@ class Monitor:
                     _LOGGER.warning("system no longer in Blink: %r", name)
 
         held = {
-            key: str(camera.camera_id) for key, camera in self.blink.cameras.items()
+            key: str(camera.camera_id) for key, camera in self._blink_cameras().items()
         }
         stale = {
             key: current[camera_id]
@@ -686,7 +728,7 @@ class Monitor:
             self._digests.pop(name, None)
 
         changed = False
-        for name, camera in self.blink.cameras.items():
+        for name, camera in self._blink_cameras().items():
             # A camera added back carries the same name on a new id, so the
             # names it used to go by have to be carried across first.
             was = self.names.id_for(name)
@@ -730,13 +772,18 @@ class Monitor:
 
     def _alias_card_names(self):
         """Let clips filed on a card under a former name reach their camera."""
-        for name, camera in self.blink.cameras.items():
+        for name, camera in self._blink_cameras().items():
             table = getattr(camera.sync, "_names_table", None)
             if table is None:
                 continue
+            # The card labels a clip with the camera's bare name, and blinkpy
+            # looks the camera up by that too, never by "System:Name".
+            prefix = f"{self._system_of_sync(camera.sync)}:"
             for former in self.names.former(name):
+                if former.startswith(prefix):
+                    former = former[len(prefix) :]
                 # Never take a label a camera answers to today.
-                table.setdefault(to_alphanumeric(former), name)
+                table.setdefault(to_alphanumeric(former), camera.name)
 
     def _slugs(self, name):
         """Return every archive directory name a camera's captures may be under."""
@@ -752,7 +799,7 @@ class Monitor:
 
     # -- motion -----------------------------------------------------------
 
-    def _new_records(self, camera):
+    def _new_records(self, name, camera):
         """Return every clip Blink is reporting for this camera that is new.
 
         blinkpy hands back a list of records per refresh, but the camera
@@ -761,8 +808,9 @@ class Monitor:
         alone quietly threw away most of what was actually recorded - matched
         against the sync module's own storage, about half of it.
         """
+        # blinkpy files these under the bare name; the cursor is under ours.
         records = (getattr(camera.sync, "last_records", None) or {}).get(camera.name)
-        cursor = library.parse_stamp(self._seen.get(camera.name))
+        cursor = library.parse_stamp(self._seen.get(name))
         fresh = []
         for record in records or []:
             stamp = library.parse_stamp(record.get("time"))
@@ -776,8 +824,8 @@ class Monitor:
 
     async def _handle_motion(self, first_pass):
         """Turn any newly reported motion into a described event."""
-        for name, camera in self.blink.cameras.items():
-            records = self._new_records(camera)
+        for name, camera in self._blink_cameras().items():
+            records = self._new_records(name, camera)
             if not records:
                 continue
 
@@ -793,7 +841,7 @@ class Monitor:
                 # fetched must not be retried on every poll from here on.
                 self._seen[name] = stamp
                 _LOGGER.info("%s: motion at %s", name, stamp)
-                await self._process_event(camera, stamp, clip_url)
+                await self._process_event(name, camera, stamp, clip_url)
 
     async def _fetch_clip(self, url):
         """Download one clip by URL, or return None."""
@@ -815,7 +863,7 @@ class Monitor:
         )
         return None
 
-    async def _process_event(self, camera, stamp, clip_url=None):
+    async def _process_event(self, name, camera, stamp, clip_url=None):
         """Save media for one event, describe it, and push it to the UI."""
         # refresh() already cached the thumbnail, so this costs nothing.
         snapshot = camera.image_from_cache
@@ -831,7 +879,7 @@ class Monitor:
             # every other one has to be asked for by its own URL.
             clip = await self._fetch_clip(clip_url)
 
-        await self._capture(camera.name, stamp, clip, snapshot)
+        await self._capture(name, stamp, clip, snapshot)
 
     async def _capture(self, camera_name, stamp, clip, snapshot):
         """Write one clip and its still to the archive, then describe it."""
@@ -950,7 +998,7 @@ class Monitor:
                     continue
                 if clip is None:
                     continue
-                camera = self.blink.cameras.get(name)
+                camera = self._blink_cameras().get(name)
                 thumb = camera.image_from_cache if camera else None
                 if await self._capture(name, stamp, clip, thumb) is not None:
                     saved += 1
@@ -984,9 +1032,10 @@ class Monitor:
         reads through blinkpy's motion cursor.
         """
         found = {}
+        cameras = {}
 
         def offer(name, stamp, fetch):
-            if name not in self.blink.cameras:
+            if name not in cameras:
                 return
             parsed = library.parse_stamp(stamp)
             if parsed is None:
@@ -997,6 +1046,8 @@ class Monitor:
             await self.blink.refresh(force=True)
             if await self._reconcile_cameras():
                 self._broadcast(self.snapshot())
+            cameras.update(self._blink_cameras())
+            systems = self._current_systems()
 
             for sync in self.blink.sync.values():
                 try:
@@ -1008,9 +1059,10 @@ class Monitor:
                     continue
                 # blinkpy exposes no reader for the manifest it just built.
                 store = getattr(sync, "_local_storage", {}) or {}
+                system = self._system_of_sync(sync)
                 for item in store.get("manifest") or []:
                     offer(
-                        item.name,
+                        self._label(system, item.name),
                         item.created_at.isoformat(),
                         self._local_fetch(item),
                     )
@@ -1028,8 +1080,12 @@ class Monitor:
                 if not entries:
                     break
                 for entry in entries:
+                    system = systems.get(str(entry.get("network_id")))
                     offer(
-                        entry.get("device_name"),
+                        self._label(
+                            system or entry.get("network_name"),
+                            entry.get("device_name"),
+                        ),
                         entry.get("created_at"),
                         self._url_fetch(entry.get("media")),
                     )
@@ -1092,6 +1148,15 @@ class Monitor:
         return status
 
     # -- daily summaries --------------------------------------------------
+
+    def _daily_system(self, key, stored):
+        """Return the one system a summary is about, or None for every camera."""
+        kind = daily.kind_of(key)
+        if kind == "location":
+            return stored.get("camera")
+        if kind == "camera":
+            return self._camera_locations().get(key)
+        return None
 
     def _camera_locations(self):
         """Map every slug each camera's captures may be under to its system.
@@ -1226,7 +1291,12 @@ class Monitor:
                 stored = self.daily.entry(slug, day)
                 if written and stored and self.daily.notify:
                     await notify.send_daily(
-                        self.session, stored["camera"], slug, day, stored["summary"]
+                        self.session,
+                        stored["camera"],
+                        slug,
+                        day,
+                        stored["summary"],
+                        system=self._daily_system(slug, stored),
                     )
             except asyncio.CancelledError:
                 raise
@@ -1382,7 +1452,12 @@ class Monitor:
         # Working through the backlog must never notify. Those clips are days
         # or weeks old, and a phone buzzing fifty times says nothing useful.
         if not backfill:
-            await notify.send(self.session, event, image=images[-1] if images else None)
+            await notify.send(
+                self.session,
+                event,
+                image=images[-1] if images else None,
+                system=(self.cameras.get(event["camera"]) or {}).get("sync"),
+            )
 
     async def set_starred(self, record, starred):
         """Star or unstar one capture, save it, and tell every browser."""
