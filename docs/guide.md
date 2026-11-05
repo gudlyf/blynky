@@ -76,7 +76,8 @@ server acts on them, so a change there holds for everyone.
 - **Push notifications** — pause the ntfy notifications for 1 hour up to 3
   days, or until turned back on; see [Notifications](#notifications). Only
   shown when `NTFY_URL` is set.
-- **Daily summaries** — turn on a short summary of each camera's day, choose
+- **Daily summaries** — turn on a short summary of each day, choose what it
+  covers (**Each camera**, **Each location**, **All cameras together**),
   whether each night's are sent to ntfy (**Send to ntfy**, shown when
   `NTFY_URL` is set), and backfill the days that have none; see
   [Daily summaries](#daily-summaries).
@@ -152,6 +153,7 @@ data/
   stills/<camera-slug>/<timestamp>.jpg      every still the Refresh button took
   latest/<camera-slug>.jpg                  the picture the grid is showing now
   daily/<camera-slug>/<YYYY-MM-DD>.json     that camera's summary of that day
+  daily/_location-<system-slug>/…, daily/_all/…   a location's, or every camera's
 ```
 
 Each capture's still also gets a `<timestamp>-thumb.jpg` beside it: a 480×270
@@ -169,9 +171,10 @@ searchable across the descriptions and by [tag](#tags). **Up to** jumps back to 
 showing that day and everything before it, without scrolling through
 everything since. Clicking a capture opens it full-size — clips play in place,
 and the arrow keys (or a swipe, on a touch screen) walk the archive without
-leaving the viewer. Narrowed to one camera while
-[daily summaries](#daily-summaries) are on, each past day opens with that
-day's summary under its heading.
+leaving the viewer. While [daily summaries](#daily-summaries) are on, each
+past day opens with that day's summaries under its heading: the camera's own
+when the library is narrowed to one camera, otherwise the all-cameras and
+per-location ones.
 
 ### Starred captures
 
@@ -268,11 +271,30 @@ Off until you turn it on under **Daily summaries** in the settings menu (or set
 `DAILY_SUMMARIES=1`). Once it is on, a busy camera's day can be read in two or
 three sentences instead of fifty clip descriptions. A summary is the gist of the
 day, such as "a quiet morning, yard work through the afternoon", and not a log
-with exact times. The clips themselves are a click away in the library:
+with exact times. The clips themselves are a click away in the library.
+
+What gets a summary is chosen under the switch, in any combination (or with
+`DAILY_SCOPES`); at least one stays on:
+
+- **Each camera** (the default) — one per camera, from its own clips.
+- **Each location** — one per Blink system (the "location" in the Blink app),
+  from all of its cameras' clips together. A camera counts towards the system
+  it is on now, so one moved from another system takes its old days with it.
+  Only offered when there are two or more systems; with one, it would say the
+  same as the next.
+- **All cameras together** — one for the whole day, from every camera.
+
+For a location's or the whole day's summary, the model is told which camera
+each description came from, and asked to describe the day as a whole rather
+than camera by camera. Each summary is a request of its own, so all three
+cost roughly three times what **Each camera** alone does: every description
+is sent once for its camera, once for its location and once for the whole day.
+
+When they are written:
 
 - **Yesterday, unasked.** After `DAILY_HOUR` (1 a.m. by default) the server
-  sends each camera's descriptions from the day before to the model and keeps
-  what comes back. That is one text-only request per camera per day. No frames
+  sends the descriptions from the day before to the model and keeps what comes
+  back. That is one text-only request per summary per day. No frames
   are sent; the model only sees descriptions it already wrote. If a request
   fails, the day keeps its **Summarize** button and is not retried on its own.
 - **Any past day, by hand.** Each camera's page lists its days under **Daily
@@ -281,16 +303,18 @@ with exact times. The clips themselves are a click away in the library:
   were described gets an **Update** button. Today is never summarized, because
   it is not over yet. The day's name opens that day in the library.
 - **On your phone.** With `NTFY_URL` set, a **Send to ntfy** switch appears
-  under Daily summaries. While it is on, each camera's summary of yesterday is
-  pushed as it is written: one notification per camera, titled with the camera
-  and the day. Tapping it opens that camera's day in the library when
-  `BLYNKY_URL` is set. They arrive in the small hours, so they go at low
+  under Daily summaries. While it is on, each summary of yesterday is pushed as
+  it is written: one notification per summary, titled with the camera,
+  location or "All cameras" and the day. Tapping it opens that day in the
+  library - narrowed to the camera, for a camera's - when `BLYNKY_URL` is set. They arrive in the small hours, so they go at low
   priority (`NTFY_DAILY_PRIORITY`, default `2`), which ntfy delivers without a
   sound. Only the nightly summaries are sent. A backfill or a **Summarize**
   button never sends one, and pausing push notifications pauses these too.
 - **In the library.** With the library narrowed to one camera, each past day
-  opens with its summary under the day's heading, or a **Summarize** button
-  when it has none.
+  opens with that camera's summary under the day's heading, or a
+  **Summarize** button when it has none. Showing every camera, it opens with
+  the all-cameras summary and each location's instead, each labelled, when
+  those are on.
 - **Every past day at once.** **Summarize N past days…** in the settings menu
   writes the rest. It asks first, and says how many clip descriptions, how many
   requests and roughly how many tokens that would be. Over a long archive that
@@ -305,10 +329,11 @@ default). A day with more is sampled evenly across its hours. Clips with no
 description are left out, and a day with no descriptions at all has nothing to
 summarize.
 
-Summaries are kept in `data/daily/<camera>/<date>.json`. Retention never
-removes them, so a day's summary is still there after its footage has been
-pruned. The two switches are kept in `data/daily.json`, so a restart
-remembers them.
+Summaries are kept in `data/daily/<camera>/<date>.json`, with a location's
+under `data/daily/_location-<system>/` and the whole day's under
+`data/daily/_all/`. Retention never removes them, so a day's summary is still
+there after its footage has been pruned. The settings are kept in
+`data/daily.json`, so a restart remembers them.
 
 A day runs midnight to midnight **in the server's time zone**. A container runs
 on UTC unless told otherwise, which ends each "day" in the evening for anyone

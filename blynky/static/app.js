@@ -36,6 +36,8 @@ const daily = {
   enabled: false,
   ntfy: false,    // whether the server has an ntfy topic to send to
   notify: false,  // whether each night's summaries are pushed there
+  scopes: ["camera"], // what gets one: "camera", "location" and/or "all"
+  groups: [],     // the location and all-camera summaries, as {key, kind, name}
   running: false,
   done: 0,
   total: 0,
@@ -1266,7 +1268,7 @@ function prependLibrary(record) {
     // The day's heading is already there, and maybe its summary; the tile
     // goes directly under them.
     let after = grid.children[1] || null;
-    if (after && after.classList.contains("day-summary")) after = after.nextSibling;
+    while (after && after.classList.contains("day-summary")) after = after.nextSibling;
     grid.insertBefore(tile, after);
   } else {
     const heading = document.createElement("h3");
@@ -2444,7 +2446,12 @@ function connect() {
     }
 
     if (data.type === "daily") {
+      const before = daily.scopes.join();
       Object.assign(daily, data.daily);
+      if (daily.scopes.join() !== before) {
+        days.slug = null;
+        removeDaySummaries();
+      }
       renderDaily();
       return;
     }
@@ -2912,6 +2919,14 @@ function setupDaily() {
   box.addEventListener("change", () => setDaily(box, { enabled: box.checked }));
   const send = el("daily-notify");
   send.addEventListener("change", () => setDaily(send, { notify: send.checked }));
+  for (const box of document.querySelectorAll("[data-daily-scope]")) {
+    box.addEventListener("change", () => {
+      const scopes = [...document.querySelectorAll("[data-daily-scope]")]
+        .filter((each) => each.checked)
+        .map((each) => each.dataset.dailyScope);
+      setDaily(box, { scopes });
+    });
+  }
 
   el("daily-backfill").addEventListener("click", askDailyBackfill);
   el("daily-cancel").addEventListener("click", cancelDailyBackfill);
@@ -2937,7 +2952,9 @@ async function setDaily(box, payload) {
     showMessage("Could not change daily summaries", "The server is unreachable.");
   } finally {
     box.disabled = false;
-    if ("enabled" in payload) days.slug = null;
+    if ("enabled" in payload || "scopes" in payload) days.slug = null;
+    // Blocks for a kind just switched off go, and any just switched on come.
+    if ("scopes" in payload) removeDaySummaries();
     // Puts the switch back where the server says it is if the request failed.
     renderDaily();
   }
@@ -2949,6 +2966,15 @@ function plural(count, word) {
 
 function renderDaily() {
   el("daily-on").checked = daily.enabled;
+  el("daily-scopes").hidden = !daily.enabled;
+  const boxes = [...document.querySelectorAll("[data-daily-scope]")];
+  for (const box of boxes) box.checked = daily.scopes.includes(box.dataset.dailyScope);
+  // The last kind left on stays on: with none, the switch above says it.
+  for (const box of boxes) box.disabled = box.checked && daily.scopes.length === 1;
+  // With one location, its summary would be the all-cameras one again.
+  const locations = daily.groups.filter((group) => group.kind === "location").length;
+  el("daily-scope-location-row").hidden =
+    locations < 2 && !daily.scopes.includes("location");
   el("daily-notify-row").hidden = !(daily.enabled && daily.ntfy);
   el("daily-notify").checked = daily.notify;
   const note = el("daily-note");
@@ -2959,7 +2985,7 @@ function renderDaily() {
   if (daily.running) {
     note.textContent = `Summarizing day ${Math.min(daily.done + 1, daily.total)} of ${daily.total}…`;
   } else if (!daily.enabled) {
-    note.textContent = "Sends each camera's descriptions to the model once a day.";
+    note.textContent = "Sends the day's descriptions to the model once a day.";
   } else if (daily.pending) {
     note.textContent = `${plural(daily.pending, "past day")} without one.`;
   } else {
@@ -2972,13 +2998,18 @@ function renderDaily() {
   pill.hidden = !daily.running;
   el("daily-running-label").textContent = `Summarizing ${daily.done}/${daily.total}`;
 
-  el("detail-daily").hidden = !daily.enabled;
+  el("detail-daily").hidden = !byCamera();
   if (daily.enabled) addDaySummaries();
   else removeDaySummaries();
   if (state.selected) {
     const camera = state.cameras.get(state.selected);
     if (camera) showDays(camera.slug);
   }
+}
+
+// Whether each camera gets a summary of its own, shown on its page.
+function byCamera() {
+  return daily.enabled && daily.scopes.includes("camera");
 }
 
 // The warning comes first, every time: a long archive is a lot of requests.
@@ -3021,7 +3052,7 @@ async function cancelDailyBackfill() {
 
 // Fetch the day list for the camera on screen, unless it is already held.
 function showDays(slug) {
-  if (!daily.enabled || !slug) return;
+  if (!byCamera() || !slug) return;
   if (days.slug === slug) return;
   days.slug = slug;
   days.list = [];
@@ -3131,23 +3162,44 @@ function daySummaryContent(slug, day) {
   return { button, text };
 }
 
-// The library, narrowed to one camera, opens each past day with what the
-// model made of it. One request per day heading, only while summaries are on.
-function addDaySummaries() {
+// The summaries that head each day in the library as it is filtered now:
+// the camera's own when narrowed to one, otherwise every camera's together
+// and each location's - whichever of those are being written.
+function librarySummaries() {
+  if (!daily.enabled) return [];
   const slug = lib.filters.camera;
-  if (!daily.enabled || !slug) return;
+  if (slug) return daily.scopes.includes("camera") ? [{ key: slug, name: null }] : [];
+  return daily.groups.filter((group) => daily.scopes.includes(group.kind));
+}
+
+// The library opens each past day with what the model made of it. One
+// request per summary per day heading, only while summaries are on.
+function addDaySummaries() {
+  const wanted = librarySummaries();
+  if (!wanted.length) return;
   const today = localDate(new Date().toISOString());
   for (const heading of el("library-grid").querySelectorAll("h3.day[data-date]")) {
     const date = heading.dataset.date;
-    const next = heading.nextElementSibling;
-    if (date >= today || (next && next.classList.contains("day-summary"))) continue;
-    const block = document.createElement("div");
-    block.className = "day-summary";
-    block.dataset.slug = slug;
-    block.dataset.date = date;
-    block.hidden = true;
-    heading.after(block);
-    loadDaySummary(block, slug, date);
+    if (date >= today) continue;
+    const held = new Set();
+    let last = heading;
+    while (last.nextElementSibling?.classList.contains("day-summary")) {
+      last = last.nextElementSibling;
+      held.add(last.dataset.slug);
+    }
+    for (const { key, name } of wanted) {
+      if (held.has(key)) continue;
+      const block = document.createElement("div");
+      block.className = "day-summary";
+      block.dataset.slug = key;
+      block.dataset.date = date;
+      // Named when it is not the camera the library is narrowed to.
+      if (name) block.dataset.name = name;
+      block.hidden = true;
+      last.after(block);
+      last = block;
+      loadDaySummary(block, key, date);
+    }
   }
 }
 
@@ -3167,6 +3219,12 @@ function fillDaySummary(block, slug, day) {
     return;
   }
   const { button, text } = daySummaryContent(slug, day);
+  if (block.dataset.name) {
+    const label = document.createElement("strong");
+    label.className = "day-summary-label";
+    label.textContent = `${block.dataset.name}: `;
+    text.prepend(label);
+  }
   block.replaceChildren(text, ...(button ? [button] : []));
   block.hidden = false;
 }

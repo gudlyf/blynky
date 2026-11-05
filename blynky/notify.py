@@ -168,15 +168,24 @@ def _click(event):
 
 
 def _day_click(slug, day):
-    """Return the address that opens one camera's day in the library."""
+    """Return the address that opens one camera's day in the library.
+
+    A summary of a location or of every camera opens the whole library on
+    that day instead, where those are shown.
+    """
     if not config.BLYNKY_URL:
         return None
-    query = f"camera={quote(slug, safe='')}&until={day}"
+    query = f"until={day}"
+    if not slug.startswith("_"):
+        query = f"camera={quote(slug, safe='')}&{query}"
     return f"{config.BLYNKY_URL}/#/library?{query}"
 
 
 async def send_daily(session, camera, slug, day, summary):
-    """Push one camera's daily summary. Returns True if it was accepted.
+    """Push one daily summary. Returns True if it was accepted.
+
+    `camera` is what it covers: a camera's name, a location's, or "All
+    cameras", and `slug` the summary's key.
 
     Not subject to the per-camera cooldown, which is for motion, but a pause
     from the settings menu holds for these too.

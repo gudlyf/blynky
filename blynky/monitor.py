@@ -124,7 +124,7 @@ class Monitor:
         self._sync_state = {"running": False, "found": 0, "saved": 0, "at": None}
         # A short account of each camera's day, and the runs that write them:
         # the backfill someone started, and yesterday's, written unasked.
-        self.daily = daily.Daily()
+        self.daily = daily.Daily(locate=self._camera_locations)
         self._daily_task = None
         self._daily_run = {"done": 0, "total": 0}
         self._daily_auto = None
@@ -1093,6 +1093,20 @@ class Monitor:
 
     # -- daily summaries --------------------------------------------------
 
+    def _camera_locations(self):
+        """Map every slug each camera's captures may be under to its system.
+
+        By where each camera is now: a camera moved to another system takes
+        its history with it, which is how its old days would read anyway.
+        """
+        found = {}
+        for name, entry in self.cameras.items():
+            if not entry.get("sync"):
+                continue
+            for slug in self._slugs(name):
+                found.setdefault(slug, entry["sync"])
+        return found
+
     def daily_status(self, running=None):
         """Return whether summaries are on, and how a backfill stands.
 
@@ -1105,6 +1119,9 @@ class Monitor:
             # Sending them to ntfy is only offered when there is a topic.
             "ntfy": bool(config.NTFY_URL),
             "notify": self.daily.notify,
+            "scopes": self.daily.scopes,
+            # The location and whole-system summaries there can be, by key.
+            "groups": self.daily.groups(),
             "running": running,
             **self._daily_run,
             **self.daily.backlog(self.library.all()),
@@ -1113,8 +1130,13 @@ class Monitor:
     def _broadcast_daily(self, running=None):
         self._broadcast({"type": "daily", "daily": self.daily_status(running)})
 
-    async def set_daily(self, enabled=None, notify=None):
-        """Change either daily setting. Turning summaries off stops a backfill."""
+    async def set_daily(self, enabled=None, notify=None, scopes=None):
+        """Change any daily setting. Turning summaries off stops a backfill.
+
+        Raises ValueError for a set of scopes with none in it.
+        """
+        if scopes is not None:
+            await self.daily.set_scopes(scopes)
         if notify is not None:
             await self.daily.set_notify(notify)
         if enabled is not None:

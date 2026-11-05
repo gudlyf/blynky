@@ -7,9 +7,16 @@ kept beside the archive, one small file per camera per day:
 
     daily/<camera slug>/<YYYY-MM-DD>.json
 
+The same can be written for each location - a Blink system, every camera on
+it together - and for every camera at once, kept the same way under keys no
+camera's slug can take, since a slug never starts with an underscore:
+
+    daily/_location-<system slug>/<YYYY-MM-DD>.json
+    daily/_all/<YYYY-MM-DD>.json
+
 A summary is only ever written from descriptions that already exist, so it
-costs one text-only call per camera per day. It outlives the footage it was
-written from: retention prunes clips, never these.
+costs one text-only call per camera, location or whole day. It outlives the
+footage it was written from: retention prunes clips, never these.
 """
 
 import asyncio
@@ -17,9 +24,31 @@ import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
+from slugify import slugify
+
 from . import config, library, vision
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# What each kind of summary covers, in the order the settings menu lists them.
+SCOPES = ("camera", "location", "all")
+ALL = "_all"
+_LOCATION = "_location-"
+
+
+def kind_of(key):
+    """Say what a summary's key covers: "camera", "location" or "all"."""
+    if key == ALL:
+        return "all"
+    if key.startswith(_LOCATION):
+        return "location"
+    return "camera"
+
+
+def location_key(name):
+    """Return the key a location's summaries are kept under."""
+    return f"{_LOCATION}{slugify(name)}"
 
 
 def _local(stamp):
@@ -60,11 +89,17 @@ def _sample(records, limit):
     return [records[int(i * step)] for i in range(limit)]
 
 
-def lines_for(records):
-    """Format a day's described clips as the model is shown them, oldest first."""
+def lines_for(records, cameras=False):
+    """Format a day's described clips as the model is shown them, oldest first.
+
+    With `cameras`, each line says which camera it came from, for a summary
+    written from several.
+    """
     ordered = sorted(records, key=lambda record: _local(record["stamp"]))
     return [
-        f"{_local(record['stamp']):%H:%M} {' '.join(record['summary'].split())}"
+        f"{_local(record['stamp']):%H:%M} "
+        f"{record['camera'] + ': ' if cameras else ''}"
+        f"{' '.join(record['summary'].split())}"
         for record in _sample(ordered, config.DAILY_MAX_CLIPS)
     ]
 
@@ -74,20 +109,33 @@ def lines_for(records):
 _OVERHEAD_TOKENS = 250
 
 
-def _tokens(records):
+def _tokens(key, records):
     picked = _sample(records, config.DAILY_MAX_CLIPS)
-    return _OVERHEAD_TOKENS + sum(len(record["summary"]) + 7 for record in picked) // 4
+    # A line from several cameras carries the camera's name as well.
+    named = kind_of(key) != "camera"
+    chars = sum(
+        len(record["summary"]) + 7 + (len(record["camera"]) + 2 if named else 0)
+        for record in picked
+    )
+    return _OVERHEAD_TOKENS + chars // 4
 
 
 class Daily:
     """The summaries on disk, and whether new ones are being written."""
 
-    def __init__(self):
-        """Start empty; call load() before serving."""
+    def __init__(self, locate=None):
+        """Start empty; call load() before serving.
+
+        `locate` returns {camera slug: location name} for the cameras Blink
+        reports now, under every slug their captures may be filed under.
+        """
         self._entries = {}
+        self._locate = locate or dict
         self.enabled = config.DAILY_SUMMARIES
         # Whether the summary written each night is also pushed to ntfy.
         self.notify = config.NTFY_DAILY
+        # Which kinds of summary are written, from SCOPES.
+        self.scopes = list(config.DAILY_SCOPES)
 
     # -- persistence ------------------------------------------------------
 
@@ -101,13 +149,17 @@ class Daily:
             stored = json.loads(text)
             self.enabled = bool(stored.get("enabled"))
             self.notify = bool(stored.get("notify", self.notify))
+            scopes = [s for s in SCOPES if s in (stored.get("scopes") or [])]
+            if scopes:
+                self.scopes = scopes
         except FileNotFoundError:
             pass
         except (OSError, ValueError, AttributeError) as error:
             _LOGGER.warning("ignoring unreadable %s: %s", config.DAILY_STATE, error)
         _LOGGER.info(
-            "daily summaries: %s, %d saved",
+            "daily summaries: %s (by %s), %d saved",
             "on" if self.enabled else "off",
+            ", ".join(self.scopes),
             len(self._entries),
         )
 
@@ -138,35 +190,86 @@ class Daily:
         await self._save()
         _LOGGER.info("daily summaries to ntfy %s", "on" if self.notify else "off")
 
+    async def set_scopes(self, scopes):
+        """Choose which kinds of summary are written. Needs at least one."""
+        chosen = [scope for scope in SCOPES if scope in scopes]
+        if not chosen:
+            raise ValueError("pick at least one of " + ", ".join(SCOPES))
+        self.scopes = chosen
+        await self._save()
+        _LOGGER.info("daily summaries by %s", ", ".join(self.scopes))
+
     async def _save(self):
-        payload = json.dumps({"enabled": self.enabled, "notify": self.notify})
+        payload = json.dumps(
+            {"enabled": self.enabled, "notify": self.notify, "scopes": self.scopes}
+        )
         try:
             await asyncio.to_thread(_write_atomic, config.DAILY_STATE, payload)
         except OSError as error:
             # Still switched for as long as this process runs.
             _LOGGER.warning("could not write %s: %s", config.DAILY_STATE, error)
 
-    def entry(self, slug, day):
+    def entry(self, key, day):
         """Return the stored summary for one camera's day, or None."""
-        return self._entries.get((slug, day))
+        return self._entries.get((key, day))
 
     # -- reading ----------------------------------------------------------
 
-    def _group(self, records, slug=None):
-        """Bucket motion by camera and local day: {(slug, day): [records]}."""
+    def _locations(self):
+        """Map each camera slug to its location's (key, name)."""
+        return {
+            slug: (location_key(name), name)
+            for slug, name in (self._locate() or {}).items()
+            if name
+        }
+
+    def groups(self):
+        """List the summaries beyond each camera's, for the UI to show."""
+        found = {ALL: {"key": ALL, "kind": "all", "name": "All cameras"}}
+        for key, name in sorted(self._locations().values(), key=lambda kv: kv[1]):
+            found.setdefault(key, {"key": key, "kind": "location", "name": name})
+        return list(found.values())
+
+    def _group(self, records, key=None):
+        """Bucket motion by summary and local day: {(key, day): [records]}.
+
+        Each clip counts towards its camera, its location and the whole day.
+        With `key`, only that one summary's days; without, every summary of
+        a kind that is being written.
+        """
+        locations = self._locations()
         days = {}
         for record in records:
             if record["kind"] != library.MOTION:
                 continue
-            if slug and record["slug"] != slug:
-                continue
             when = _local(record["stamp"])
             if when is None:
                 continue
-            days.setdefault((record["slug"], when.date().isoformat()), []).append(
-                record
-            )
+            keys = [record["slug"], ALL]
+            if record["slug"] in locations:
+                keys.append(locations[record["slug"]][0])
+            for held in keys:
+                if key is not None and held != key:
+                    continue
+                if key is None and kind_of(held) not in self.scopes:
+                    continue
+                days.setdefault((held, when.date().isoformat()), []).append(record)
         return days
+
+    def _name(self, key, records):
+        """Return what a summary is about, as a person would call it."""
+        kind = kind_of(key)
+        if kind == "all":
+            return "All cameras"
+        if kind == "location":
+            for held, name in self._locations().values():
+                if held == key:
+                    return name
+            for (held, _), entry in self._entries.items():
+                if held == key and entry.get("camera"):
+                    return entry["camera"]
+            return key[len(_LOCATION) :]
+        return max(records, key=lambda r: _local(r["stamp"]))["camera"]
 
     def _day(self, slug, day, records, current):
         """Describe one camera's day the way the UI lists it."""
@@ -231,7 +334,7 @@ class Daily:
         return {
             "pending": len(found),
             "clips": sum(len(records) for _, _, records in found),
-            "tokens": sum(_tokens(records) for _, _, records in found),
+            "tokens": sum(_tokens(key, records) for key, _, records in found),
         }
 
     # -- writing ----------------------------------------------------------
@@ -247,15 +350,31 @@ class Daily:
         described = [record for record in records if record["summary"]]
         if not described:
             raise LookupError(f"{slug} has no descriptions on {day}")
-        camera = max(described, key=lambda r: _local(r["stamp"]))["camera"]
+        kind = kind_of(slug)
+        camera = self._name(slug, described)
+        group = None
+        if kind != "camera":
+            cameras = sorted({record["camera"] for record in described})
+            group = (
+                f"Location: {camera} (cameras: {', '.join(cameras)})"
+                if kind == "location"
+                else f"Every camera: {', '.join(cameras)}"
+            )
         summary = await vision.summarize_day(
-            session, camera, date.fromisoformat(day), lines_for(described)
+            session,
+            camera,
+            date.fromisoformat(day),
+            lines_for(described, cameras=group is not None),
+            group=group,
         )
         if not summary:
             return None
 
         entry = {
             "slug": slug,
+            "kind": kind,
+            # Whatever it covers, as a person would call it: the camera's
+            # name, the location's, or "All cameras".
             "camera": camera,
             "date": day,
             "summary": summary,

@@ -343,8 +343,9 @@ async def daily_summaries(request):
     """Change the daily summary settings, and say how the backlog stands.
 
     POST {"enabled": bool} turns summaries on or off, {"notify": bool} sends
-    each night's to ntfy or not; either or both. Like the ntfy pause, these
-    are the server's settings, so they hold for everyone.
+    each night's to ntfy or not, and {"scopes": [...]} picks what gets one -
+    "camera", "location" and "all", at least one; any of them at once. Like
+    the ntfy pause, these are the server's settings, so they hold for everyone.
     """
     monitor = request.app["monitor"]
     if request.method == "POST":
@@ -355,8 +356,21 @@ async def daily_summaries(request):
         if not isinstance(body, dict):
             raise web.HTTPBadRequest(reason="expected a JSON object")
         changes = {key: body[key] for key in ("enabled", "notify") if key in body}
-        if not changes or not all(isinstance(v, bool) for v in changes.values()):
+        if not all(isinstance(v, bool) for v in changes.values()):
             raise web.HTTPBadRequest(reason="enabled and notify must be true or false")
+        if "scopes" in body:
+            scopes = body["scopes"]
+            if (
+                not isinstance(scopes, list)
+                or not scopes
+                or not all(scope in daily.SCOPES for scope in scopes)
+            ):
+                raise web.HTTPBadRequest(
+                    reason="scopes must list one or more of " + ", ".join(daily.SCOPES)
+                )
+            changes["scopes"] = scopes
+        if not changes:
+            raise web.HTTPBadRequest(reason="nothing to change")
         return web.json_response(await monitor.set_daily(**changes))
     return web.json_response(monitor.daily_status())
 
@@ -407,6 +421,18 @@ async def summarize_day(request):
     day = daily.parse_day(request.match_info["day"])
     if day is None:
         raise web.HTTPBadRequest(reason="day must be YYYY-MM-DD")
+    kind = daily.kind_of(request.match_info["slug"])
+    if kind not in monitor.daily.scopes:
+        return web.json_response(
+            {
+                "status": "error",
+                "message": {
+                    "camera": "Summaries of each camera are turned off.",
+                    "location": "Summaries of each location are turned off.",
+                    "all": "Summaries of all cameras together are turned off.",
+                }[kind],
+            }
+        )
     # Today is still happening; a summary of half of it would read as all.
     if day >= daily.today():
         return web.json_response(

@@ -34,7 +34,7 @@ It runs on your own machine, and the descriptions come from a model on your own 
 - **Motion clips with descriptions.** Blynky samples frames from each clip and has a vision model describe them. Each description also lists what it found (`person`, `animal`, `vehicle` or `package`), and that list drives the filters and alerts. Captures are tagged too: `#person`, `#vehicle`, `#night`, a few finer tags like `#dog` or `#delivery`, and the names of people it recognises (or `#unknown` when it doesn't).
 - **A full library.** Every clip and still is saved, grouped by day and searchable by text or `#tag`. You can filter by camera or by what was seen, and jump to any date. Star the captures worth keeping, and show only those with one click.
 - **Phone alerts through [ntfy](https://ntfy.sh).** An alert carries the description and a frame from the clip, and tapping it can open that capture in Blynky. You choose which subjects trigger one, there's a cooldown for each camera, and you can pause alerts from the UI.
-- **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions for each camera and writes a two- or three-sentence summary of it. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy each night. Past days can be summarized one at a time or all at once, with a warning about token use first.
+- **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions and writes a two- or three-sentence summary of it: for each camera, for each location (Blink system), for all cameras together, or any mix of those. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy each night. Past days can be summarized one at a time or all at once, with a warning about token use first.
 - **Known people (optional).** Tag a person in a few captures and the model will guess who later visitors are ("Looks like Alex"). Recognised people can get quieter alerts, or none at all.
 - **Catches what polling misses.** **Sync now** pulls recent clips from the cloud and from the sync modules' storage, including clips recorded while Blynky wasn't running.
 - **Copes with Blink changes.** Cameras renamed, re-added or moved between systems are picked up without a restart, and their history stays with them.
@@ -155,6 +155,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DAILY_SUMMARIES` | unset | `1` turns on a short summary of each camera's day. The switch in the settings menu overrides this once used. See the [guide](docs/guide.md#daily-summaries) |
+| `DAILY_SCOPES` | `camera` | What gets a summary: any of `camera`, `location` (each Blink system, its cameras together) and `all` (every camera together), comma separated. The settings menu overrides this once used |
 | `DAILY_HOUR` | `1` | Hour, server time, after which yesterday is summarized |
 | `DAILY_MAX_CLIPS` | `300` | Most clip descriptions one day's summary is written from |
 | `DAILY_PAUSE` | `2` | Seconds between days while backfilling summaries |
@@ -215,6 +216,7 @@ data/
   latest/<camera>.jpg                     the picture each card shows
   people/<person>/                        reference frames for known people
   daily/<camera>/<YYYY-MM-DD>.json        one camera's summary of one day
+  daily/_location-<system>/, daily/_all/  the same for a location, or every camera
   cameras.json                            every name each camera has had
   ntfy.json, daily.json                   settings changed from the settings menu
 ```
