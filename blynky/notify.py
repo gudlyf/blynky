@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from aiohttp import ClientTimeout
+from slugify import slugify
 
 from . import config
 
@@ -181,11 +182,31 @@ def _day_click(slug, day):
     return f"{config.BLYNKY_URL}/#/library?{query}"
 
 
-async def send_daily(session, camera, slug, day, summary):
+# The longest topic name ntfy accepts.
+_TOPIC_MAX = 64
+
+
+def topic_url(system=None):
+    """Return where a notification about `system` goes.
+
+    NTFY_URL itself, unless NTFY_SYSTEM_TOPICS gives each system a topic of
+    its own: the system's name, slugified, in front of NTFY_URL's topic.
+    """
+    if not (config.NTFY_SYSTEM_TOPICS and system and config.NTFY_URL):
+        return config.NTFY_URL
+    base, _, topic = config.NTFY_URL.rstrip("/").rpartition("/")
+    prefix = slugify(system)
+    if not base or not topic or not prefix:
+        return config.NTFY_URL
+    return f"{base}/{prefix}-{topic}"[: len(base) + 1 + _TOPIC_MAX]
+
+
+async def send_daily(session, camera, slug, day, summary, system=None):
     """Push one daily summary. Returns True if it was accepted.
 
     `camera` is what it covers: a camera's name, a location's, or "All
-    cameras", and `slug` the summary's key.
+    cameras", and `slug` the summary's key. `system`, when it covers one
+    system or a camera on one, picks that system's topic; see topic_url().
 
     Not subject to the per-camera cooldown, which is for motion, but a pause
     from the settings menu holds for these too.
@@ -203,7 +224,7 @@ async def send_daily(session, camera, slug, day, summary):
         headers["Click"] = click
     try:
         response = await session.post(
-            config.NTFY_URL,
+            topic_url(system),
             data=summary.encode("utf-8"),
             headers=headers,
             timeout=ClientTimeout(total=config.NTFY_TIMEOUT),
@@ -250,8 +271,11 @@ def should_send(event):
     return True
 
 
-async def send(session, event, image=None):
-    """Push one event to ntfy. Returns True if it was accepted."""
+async def send(session, event, image=None, system=None):
+    """Push one event to ntfy. Returns True if it was accepted.
+
+    `system` is the Blink system the camera is on, for topic_url().
+    """
     if not should_send(event):
         return False
 
@@ -287,7 +311,7 @@ async def send(session, event, image=None):
     _last_sent[event["camera"]] = time.monotonic()
     try:
         response = await session.post(
-            config.NTFY_URL,
+            topic_url(system),
             data=body,
             headers=headers,
             timeout=ClientTimeout(total=config.NTFY_TIMEOUT),

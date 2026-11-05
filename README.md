@@ -169,6 +169,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NTFY_URL` | unset | ntfy topic URL. Nothing is sent while this is empty |
+| `NTFY_SYSTEM_TOPICS` | as `SYSTEM_PREFIX` | `1` sends each Blink system's notifications to its own topic, `<system>-<topic>` beside `NTFY_URL`'s. See the [guide](docs/guide.md#notifications) |
 | `NTFY_SUBJECTS` | `person` | Subjects that trigger an alert: `person`, `animal`, `vehicle`, `package` |
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |
 | `NTFY_COOLDOWN` | `120` | Seconds before the same camera may alert again |
@@ -196,6 +197,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `TIMELINE` | `25` | Rows in the motion timeline |
 | `SYNC_LIMIT` | `5` | Clips per camera that **Sync now** pulls |
 | `SYNC_DAYS` | `2` | How many days back **Sync now** searches Blink's cloud clips |
+| `SYSTEM_PREFIX` | unset | `1` names each camera `System:Camera`, for accounts with more than one Blink system, where two cameras can share a name. See [Two cameras with the same name](docs/guide.md#two-cameras-with-the-same-name) |
 | `CAMERA_RENAMES` | empty | `Old Name=New Name` pairs, comma-separated. See [Renaming a camera](docs/guide.md#renaming-a-camera) |
 | `RETAIN_DAYS` | `0` | Delete captures older than this, except starred ones. `0` keeps everything |
 | `RETAIN_DRY_RUN` | `0` | `1` logs what retention would delete, without deleting it |
