@@ -496,7 +496,8 @@ with `{"paused": true, "hours": 4}`, `{"paused": true}` or `{"paused": false}`.
 The frame travels as the request body, because a loopback-bound archive is not
 somewhere ntfy could fetch an attachment from. Note that an ntfy.sh topic is
 readable by anyone who knows its name, and these messages say who is at the
-house and when.
+house and when; [your own ntfy server](#running-your-own-ntfy-server) keeps
+them off ntfy.sh.
 
 ### Opening the capture from a notification
 
@@ -527,6 +528,72 @@ Two things to settle before setting it:
   topic sees it. A private tailnet name or LAN address tells a stranger little
   they could use, but it is one more reason to keep the topic name long and
   random, or the ntfy server your own.
+
+### Running your own ntfy server
+
+`docker-compose.yml` has an optional ntfy server beside Blynky, for a tailnet.
+The descriptions and snapshots then stay on your machine instead of ntfy.sh,
+and only devices on the tailnet can read a topic.
+
+1. Give it a name on the tailnet. In the Tailscale admin console, under
+   Services, define a service such as `blynky-ntfy` that listens on TCP 443,
+   then serve ntfy as it from this machine and approve the machine as its
+   host:
+
+   ```bash
+   tailscale serve --service=svc:blynky-ntfy --https=443 127.0.0.1:2586
+   ```
+
+   It is then `https://blynky-ntfy.your-tailnet.ts.net`, with a certificate
+   and no port to remember. As with
+   [Blynky's own service](#reaching-it-from-other-devices), the machine must
+   be tagged, and the phone needs a grant to the service.
+
+2. In `.env`, set that address, and send Blynky's notifications to ntfy over
+   the compose network:
+
+   ```
+   NTFY_PUBLIC_URL=https://blynky-ntfy.your-tailnet.ts.net
+   NTFY_URL=http://ntfy/your-topic
+   ```
+
+3. Start it with the rest:
+
+   ```bash
+   docker compose --profile ntfy up -d
+   ```
+
+4. In the ntfy app's settings, set the default server to `NTFY_PUBLIC_URL`,
+   and subscribe to the topic again there.
+
+Without Tailscale Services, serve it on a port of the machine's own name
+instead, `tailscale serve --bg --https=8443 2586`, and use
+`https://<machine>.your-tailnet.ts.net:8443`. It needs a port of its own
+(ntfy cannot run under a path such as `/ntfy`), and Tailscale serves HTTPS on
+443, 8443 and 10000. Use the machine's name, not that of a service such as
+the one Blynky is on: a service name answers only on the ports defined for
+it, so `https://blynky.your-tailnet.ts.net:8443` just times out. The first
+request to a name can also take ten seconds or so while Tailscale fetches its
+certificate.
+
+`NTFY_PUBLIC_URL` has to be the address the phone uses, not the compose one:
+the links in a notification, the snapshot among them, are built from it. Left
+empty, ntfy will not start; changed, it takes effect with `docker compose
+--profile ntfy up -d`. `NTFY_BIND_ADDR` and `NTFY_HOST_PORT` move where
+it is published, `127.0.0.1:2586` by default. Its cache is kept in `./ntfy`;
+messages expire after 12 hours and snapshots after 3, so it stays small.
+
+**On iOS**, Apple lets only ntfy.sh wake the ntfy app, so the server hands
+ntfy.sh a message ID and a hash of the topic, never the message, and the app
+then fetches the message from your server. The wake-up arrives anywhere, but
+the message and the snapshot only load while the phone is on Tailscale. The
+server needs to reach ntfy.sh for this; nothing has to reach it from the
+internet. Android fetches from your server directly and does not need
+ntfy.sh at all.
+
+Never put ntfy behind `tailscale funnel` unless you also give it users and
+passwords (`NTFY_AUTH_FILE`, `NTFY_AUTH_DEFAULT_ACCESS=deny-all`): with neither,
+anyone who finds it can read the topics.
 
 ## Known people
 
@@ -866,9 +933,10 @@ described in [Reaching it from other devices](#reaching-it-from-other-devices)
 | `BIND_ADDR` | `127.0.0.1` | Host interface the port is published on |
 | `HOST_PORT` | `8080` | Host port |
 
-So `tailscale serve --bg --https=443 8080` works unchanged against the
-default, and exposing the app more widely means setting `BIND_ADDR` — a
-deliberate edit, not a side effect of containerising.
+So `tailscale serve` works unchanged against the default, as a service
+(`--service=svc:blynky --https=443 127.0.0.1:8080`) or on the machine's own
+name (`--bg --https=443 8080`), and exposing the app more widely means
+setting `BIND_ADDR` — a deliberate edit, not a side effect of containerising.
 
 ### Reaching Ollama from the container
 
@@ -920,15 +988,30 @@ happens to be up, can submit credentials over plain HTTP. The default
 
 Over Tailscale, best to worst:
 
-1. **`tailscale serve`** — leave the app on `127.0.0.1` and front it:
+1. **`tailscale serve`** — leave the app on `127.0.0.1` and front it. Best as
+   a Tailscale Service, which gets Blynky a name of its own: define `blynky`
+   under Services in the admin console, listening on TCP 443, then
+
+   ```bash
+   tailscale serve --service=svc:blynky --https=443 127.0.0.1:8080
+   ```
+
+   and approve this machine as its host. It is then
+   `https://blynky.your-tailnet.ts.net`, and stays that if Blynky moves to
+   another machine; other things on the same machine, such as
+   [your own ntfy server](#running-your-own-ntfy-server), get names of their
+   own on 443 the same way. A service host must be a tagged machine, and the
+   devices that open it need a grant to the service in the tailnet policy.
+
+   Without Services, serve it on the machine's own name:
 
    ```bash
    tailscale serve --bg --https=443 8080
    ```
 
-   Real HTTPS on your MagicDNS name, tailnet-only, nothing bound to a routable
-   interface. The WebSocket upgrade is proxied, and the page switches itself to
-   `wss://` when served over HTTPS.
+   Either way: real HTTPS on a MagicDNS name, tailnet-only, nothing bound to a
+   routable interface. The WebSocket upgrade is proxied, and the page switches
+   itself to `wss://` when served over HTTPS.
 
 2. **Bind the tailnet IP** — `HOST=100.x.y.z uv run run.py`. Reachable from
    tailnet devices only; LAN and public interfaces stay closed. WireGuard
