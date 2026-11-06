@@ -169,6 +169,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NTFY_URL` | unset | ntfy topic URL. Nothing is sent while this is empty |
+| `NTFY_PUBLIC_URL` | unset | Only for the optional ntfy server in `docker-compose.yml` (`--profile ntfy`): where your phone reaches it. See [Running your own ntfy server](docs/guide.md#running-your-own-ntfy-server) |
 | `NTFY_SYSTEM_TOPICS` | as `SYSTEM_PREFIX` | `1` sends each Blink system's notifications to its own topic, `<system>-<topic>` beside `NTFY_URL`'s. See the [guide](docs/guide.md#notifications) |
 | `NTFY_SUBJECTS` | `person` | Subjects that trigger an alert: `person`, `animal`, `vehicle`, `package` |
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |

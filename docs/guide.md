@@ -496,7 +496,8 @@ with `{"paused": true, "hours": 4}`, `{"paused": true}` or `{"paused": false}`.
 The frame travels as the request body, because a loopback-bound archive is not
 somewhere ntfy could fetch an attachment from. Note that an ntfy.sh topic is
 readable by anyone who knows its name, and these messages say who is at the
-house and when.
+house and when; [your own ntfy server](#running-your-own-ntfy-server) keeps
+them off ntfy.sh.
 
 ### Opening the capture from a notification
 
@@ -527,6 +528,51 @@ Two things to settle before setting it:
   topic sees it. A private tailnet name or LAN address tells a stranger little
   they could use, but it is one more reason to keep the topic name long and
   random, or the ntfy server your own.
+
+### Running your own ntfy server
+
+`docker-compose.yml` has an optional ntfy server beside Blynky, for a tailnet.
+The descriptions and snapshots then stay on your machine instead of ntfy.sh,
+and only devices on the tailnet can read a topic.
+
+1. In `.env`, say where your phone will reach it, and send Blynky's
+   notifications to it over the compose network:
+
+   ```
+   NTFY_PUBLIC_URL=https://blynky.your-tailnet.ts.net:8443
+   NTFY_URL=http://ntfy/your-topic
+   ```
+
+2. Start it with the rest, and put it on the tailnet with a certificate:
+
+   ```bash
+   docker compose --profile ntfy up -d
+   tailscale serve --bg --https=8443 2586
+   ```
+
+   It needs a port of its own: ntfy cannot run under a path such as `/ntfy`.
+   Tailscale serves HTTPS on 443, 8443 and 10000.
+
+3. In the ntfy app's settings, set the default server to `NTFY_PUBLIC_URL`,
+   and subscribe to the topic again there.
+
+`NTFY_PUBLIC_URL` has to be the address the phone uses, not the compose one:
+the links in a notification, the snapshot among them, are built from it. Left
+empty, ntfy will not start. `NTFY_BIND_ADDR` and `NTFY_HOST_PORT` move where
+it is published, `127.0.0.1:2586` by default. Its cache is kept in `./ntfy`;
+messages expire after 12 hours and snapshots after 3, so it stays small.
+
+**On iOS**, Apple lets only ntfy.sh wake the ntfy app, so the server hands
+ntfy.sh a message ID and a hash of the topic, never the message, and the app
+then fetches the message from your server. The wake-up arrives anywhere, but
+the message and the snapshot only load while the phone is on Tailscale. The
+server needs to reach ntfy.sh for this; nothing has to reach it from the
+internet. Android fetches from your server directly and does not need
+ntfy.sh at all.
+
+Never put ntfy behind `tailscale funnel` unless you also give it users and
+passwords (`NTFY_AUTH_FILE`, `NTFY_AUTH_DEFAULT_ACCESS=deny-all`): with neither,
+anyone who finds it can read the topics.
 
 ## Known people
 
