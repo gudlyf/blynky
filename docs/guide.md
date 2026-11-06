@@ -535,30 +535,49 @@ Two things to settle before setting it:
 The descriptions and snapshots then stay on your machine instead of ntfy.sh,
 and only devices on the tailnet can read a topic.
 
-1. In `.env`, say where your phone will reach it, and send Blynky's
-   notifications to it over the compose network:
+1. Give it a name on the tailnet. In the Tailscale admin console, under
+   Services, define a service such as `blynky-ntfy` that listens on TCP 443,
+   then serve ntfy as it from this machine and approve the machine as its
+   host:
+
+   ```bash
+   tailscale serve --service=svc:blynky-ntfy --https=443 127.0.0.1:2586
+   ```
+
+   It is then `https://blynky-ntfy.your-tailnet.ts.net`, with a certificate
+   and no port to remember.
+
+2. In `.env`, set that address, and send Blynky's notifications to ntfy over
+   the compose network:
 
    ```
-   NTFY_PUBLIC_URL=https://blynky.your-tailnet.ts.net:8443
+   NTFY_PUBLIC_URL=https://blynky-ntfy.your-tailnet.ts.net
    NTFY_URL=http://ntfy/your-topic
    ```
 
-2. Start it with the rest, and put it on the tailnet with a certificate:
+3. Start it with the rest:
 
    ```bash
    docker compose --profile ntfy up -d
-   tailscale serve --bg --https=8443 2586
    ```
 
-   It needs a port of its own: ntfy cannot run under a path such as `/ntfy`.
-   Tailscale serves HTTPS on 443, 8443 and 10000.
-
-3. In the ntfy app's settings, set the default server to `NTFY_PUBLIC_URL`,
+4. In the ntfy app's settings, set the default server to `NTFY_PUBLIC_URL`,
    and subscribe to the topic again there.
+
+Without Tailscale Services, serve it on a port of the machine's own name
+instead, `tailscale serve --bg --https=8443 2586`, and use
+`https://<machine>.your-tailnet.ts.net:8443`. It needs a port of its own
+(ntfy cannot run under a path such as `/ntfy`), and Tailscale serves HTTPS on
+443, 8443 and 10000. Use the machine's name, not that of a service such as
+the one Blynky is on: a service name answers only on the ports defined for
+it, so `https://blynky.your-tailnet.ts.net:8443` just times out. The first
+request to a name can also take ten seconds or so while Tailscale fetches its
+certificate.
 
 `NTFY_PUBLIC_URL` has to be the address the phone uses, not the compose one:
 the links in a notification, the snapshot among them, are built from it. Left
-empty, ntfy will not start. `NTFY_BIND_ADDR` and `NTFY_HOST_PORT` move where
+empty, ntfy will not start; changed, it takes effect with `docker compose
+--profile ntfy up -d`. `NTFY_BIND_ADDR` and `NTFY_HOST_PORT` move where
 it is published, `127.0.0.1:2586` by default. Its cache is kept in `./ntfy`;
 messages expire after 12 hours and snapshots after 3, so it stays small.
 

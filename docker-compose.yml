@@ -57,13 +57,14 @@ services:
   #
   #   docker compose --profile ntfy up -d
   #
-  # Made for a tailnet. Like Blynky it is published on loopback only, and
-  # `tailscale serve --bg --https=8443 2586` puts it on your MagicDNS name with
-  # a real certificate. NTFY_PUBLIC_URL in .env must be that address: the
-  # links in each notification, the snapshot among them, are built from it, and
-  # the phone opens them over Tailscale. Blynky itself publishes over the
-  # compose network, with NTFY_URL=http://ntfy/<topic>. See "Running your own
-  # ntfy server" in docs/guide.md.
+  # Made for a tailnet. Like Blynky it is published on loopback only, and a
+  # Tailscale Service gives it a name and a real certificate:
+  # `tailscale serve --service=svc:blynky-ntfy --https=443 127.0.0.1:2586`.
+  # NTFY_PUBLIC_URL in .env must be that address: the links in each
+  # notification, the snapshot among them, are built from it, and the phone
+  # opens them over Tailscale. Blynky itself publishes over the compose
+  # network, with NTFY_URL=http://ntfy/<topic>. See "Running your own ntfy
+  # server" in docs/guide.md.
   ntfy:
     image: binwiederhier/ntfy:v2.33.1
     profiles: [ntfy]
