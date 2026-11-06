@@ -92,11 +92,13 @@ That commit is on the `blynky` branch of [gudlyf/blinkpy](https://github.com/gud
 > [!WARNING]
 > **Blynky has no login of its own.** Anyone who can reach the port can see your cameras, clips and descriptions.
 
-For that reason it listens on `127.0.0.1` by default. To reach it from your other devices, the best option is to put it behind something that adds HTTPS and limits who can connect, such as [`tailscale serve`](https://tailscale.com/kb/1312/serve):
+For that reason it listens on `127.0.0.1` by default. To reach it from your other devices, the best option is to put it behind something that adds HTTPS and limits who can connect, such as [`tailscale serve`](https://tailscale.com/kb/1312/serve). Best is as a [Tailscale Service](https://tailscale.com/blog/services-beta), which gives Blynky a name of its own, `https://blynky.your-tailnet.ts.net`. Define `blynky` under Services in the admin console, listening on TCP 443, then on this machine (which must carry a tag):
 
 ```bash
-tailscale serve --bg --https=443 8080
+tailscale serve --service=svc:blynky --https=443 127.0.0.1:8080
 ```
+
+and approve the machine as the service's host. Without Services, `tailscale serve --bg --https=443 8080` puts it on the machine's own name instead.
 
 Never expose it to the open internet, for example with `tailscale funnel` or a port forward. [Reaching it from other devices](docs/guide.md#reaching-it-from-other-devices) compares the options.
 

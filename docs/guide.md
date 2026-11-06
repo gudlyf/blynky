@@ -545,7 +545,9 @@ and only devices on the tailnet can read a topic.
    ```
 
    It is then `https://blynky-ntfy.your-tailnet.ts.net`, with a certificate
-   and no port to remember.
+   and no port to remember. As with
+   [Blynky's own service](#reaching-it-from-other-devices), the machine must
+   be tagged, and the phone needs a grant to the service.
 
 2. In `.env`, set that address, and send Blynky's notifications to ntfy over
    the compose network:
@@ -931,9 +933,10 @@ described in [Reaching it from other devices](#reaching-it-from-other-devices)
 | `BIND_ADDR` | `127.0.0.1` | Host interface the port is published on |
 | `HOST_PORT` | `8080` | Host port |
 
-So `tailscale serve --bg --https=443 8080` works unchanged against the
-default, and exposing the app more widely means setting `BIND_ADDR` — a
-deliberate edit, not a side effect of containerising.
+So `tailscale serve` works unchanged against the default, as a service
+(`--service=svc:blynky --https=443 127.0.0.1:8080`) or on the machine's own
+name (`--bg --https=443 8080`), and exposing the app more widely means
+setting `BIND_ADDR` — a deliberate edit, not a side effect of containerising.
 
 ### Reaching Ollama from the container
 
@@ -985,15 +988,30 @@ happens to be up, can submit credentials over plain HTTP. The default
 
 Over Tailscale, best to worst:
 
-1. **`tailscale serve`** — leave the app on `127.0.0.1` and front it:
+1. **`tailscale serve`** — leave the app on `127.0.0.1` and front it. Best as
+   a Tailscale Service, which gets Blynky a name of its own: define `blynky`
+   under Services in the admin console, listening on TCP 443, then
+
+   ```bash
+   tailscale serve --service=svc:blynky --https=443 127.0.0.1:8080
+   ```
+
+   and approve this machine as its host. It is then
+   `https://blynky.your-tailnet.ts.net`, and stays that if Blynky moves to
+   another machine; other things on the same machine, such as
+   [your own ntfy server](#running-your-own-ntfy-server), get names of their
+   own on 443 the same way. A service host must be a tagged machine, and the
+   devices that open it need a grant to the service in the tailnet policy.
+
+   Without Services, serve it on the machine's own name:
 
    ```bash
    tailscale serve --bg --https=443 8080
    ```
 
-   Real HTTPS on your MagicDNS name, tailnet-only, nothing bound to a routable
-   interface. The WebSocket upgrade is proxied, and the page switches itself to
-   `wss://` when served over HTTPS.
+   Either way: real HTTPS on a MagicDNS name, tailnet-only, nothing bound to a
+   routable interface. The WebSocket upgrade is proxied, and the page switches
+   itself to `wss://` when served over HTTPS.
 
 2. **Bind the tailnet IP** — `HOST=100.x.y.z uv run run.py`. Reachable from
    tailnet devices only; LAN and public interfaces stay closed. WireGuard
