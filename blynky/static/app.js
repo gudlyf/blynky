@@ -129,7 +129,7 @@ function cameraCard(camera) {
   thumb.className = "thumb";
   if (camera.image) {
     const img = document.createElement("img");
-    img.src = camera.image;
+    img.src = mediaUrl(camera.image);
     img.alt = "";
     thumb.append(img);
   } else {
@@ -318,7 +318,7 @@ function isolate(name, event, live) {
   const video = el("detail-video");
   const toggle = el("toggle-media");
 
-  img.src = (shown && shown.image) || camera.image || "";
+  img.src = mediaUrl((shown && shown.image) || camera.image);
   img.alt = shown ? `${name} at ${fullTime(shown.stamp)}` : `${name}, latest still`;
   img.hidden = false;
   video.hidden = true;
@@ -343,7 +343,7 @@ function isolate(name, event, live) {
   el("stage-play").hidden = !(shown && shown.clip);
 
   const download = el("detail-download");
-  const media = (shown && (shown.clip || shown.image)) || camera.image;
+  const media = mediaUrl((shown && (shown.clip || shown.image)) || camera.image);
   download.hidden = !media;
   if (media) download.href = media;
   else download.removeAttribute("href");
@@ -403,7 +403,7 @@ function toggleMedia(clipUrl) {
   state.showingClip = !state.showingClip;
   el("stage-play").hidden = state.showingClip;
   if (state.showingClip) {
-    video.src = clipUrl;
+    video.src = mediaUrl(clipUrl);
     video.hidden = false;
     img.hidden = true;
     toggle.textContent = "Show still";
@@ -593,7 +593,7 @@ function timelineRow(record, withCamera, open, burst) {
   if (picture) {
     const thumb = document.createElement("img");
     thumb.className = "tl-thumb";
-    thumb.src = picture;
+    thumb.src = mediaUrl(picture);
     thumb.alt = "";
     thumb.loading = "lazy";
     row.append(thumb);
@@ -1200,7 +1200,7 @@ function libraryTile(record) {
   thumb.className = "tile-thumb";
   if (record.image) {
     const img = document.createElement("img");
-    img.src = record.thumb || record.image;
+    img.src = mediaUrl(record.thumb || record.image);
     img.alt = "";
     img.loading = "lazy";
     thumb.append(img);
@@ -1938,7 +1938,7 @@ function fillMotionToast(node, event, clips) {
   const thumb = document.createElement(picture ? "img" : "span");
   thumb.className = "toast-thumb";
   if (picture) {
-    thumb.src = picture;
+    thumb.src = mediaUrl(picture);
     thumb.alt = "";
   } else {
     thumb.append(icon("play"));
@@ -2176,7 +2176,20 @@ function relAge(stamp) {
 }
 
 function cssEscape(value) {
-  return (window.CSS && CSS.escape) ? CSS.escape(value) : value.replace(/"/g, '\\"');
+  return (window.CSS && CSS.escape) ? CSS.escape(value) : value.replace(/["\\]/g, "\\$&");
+}
+
+// Media addresses arrive over the socket and are always the server's own
+// paths. Anything else - another site, a javascript: link - is dropped
+// rather than shown or offered for download.
+function mediaUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value, location.href);
+    return url.origin === location.origin ? url.pathname + url.search : "";
+  } catch (err) {
+    return "";
+  }
 }
 
 function setStatus(text, cls) {
@@ -3205,7 +3218,7 @@ function addDaySummaries() {
 
 async function loadDaySummary(block, slug, date) {
   try {
-    const day = await getJSON(`/api/daily/${encodeURIComponent(slug)}/${date}`);
+    const day = await getJSON(`/api/daily/${encodeURIComponent(slug)}/${encodeURIComponent(date)}`);
     fillDaySummary(block, slug, day);
   } catch (err) {
     block.remove();
@@ -3245,7 +3258,7 @@ async function summarizeDay(slug, date) {
   renderDays();
   refreshDayBlocks(slug, date);
   try {
-    const result = await post(`/api/daily/${encodeURIComponent(slug)}/${date}`, {});
+    const result = await post(`/api/daily/${encodeURIComponent(slug)}/${encodeURIComponent(date)}`, {});
     if (result.status === "ok") mergeDay(slug, result.day);
     else showMessage("No summary written", result.message || "The server said no.");
   } catch (err) {
