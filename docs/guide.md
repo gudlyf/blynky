@@ -844,6 +844,34 @@ The image carries `ffmpeg`, runs as an unprivileged user, and has a
 healthcheck on `/api/state`, so `docker compose ps` distinguishes "listening"
 from "wedged".
 
+### The published image
+
+Every release tag is built for amd64 and arm64 and published as
+`ghcr.io/gudlyf/blynky`, which is what `docker-compose.yml` pulls. Its tags:
+
+| Tag | Is |
+| --- | --- |
+| `0.4.0` | That release, and never anything else |
+| `0.4` | The newest `0.4.x` release |
+| `latest` | The newest release; the default |
+| `edge` | `main`, when someone has built it from the Actions tab |
+
+Choose one with `BLYNKY_TAG` in `.env`. To upgrade:
+
+```bash
+git pull                  # the compose file and docs, if they changed
+docker compose pull
+docker compose up -d
+```
+
+To build it yourself instead, from this checkout, run `docker compose build`.
+The result takes the same name, so `docker compose up -d` runs it, until the
+next `docker compose pull` swaps the published one back in.
+
+The workflow that publishes it is `.github/workflows/docker.yml`. It runs on
+any `v*` tag pushed, builds each architecture on a GitHub runner of that kind,
+and joins them into one image.
+
 ### Where blinkpy comes from
 
 Running with `uv` uses the `../blinkpy` checkout. The image does not: it

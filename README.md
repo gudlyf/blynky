@@ -57,13 +57,13 @@ Blink has no push API, so Blynky polls, no more often than once a minute so it d
 
 ## Quick start (Docker)
 
-You need Docker with Compose, and an Ollama server with a vision model that is reachable from the container. Docker takes care of everything else, including `ffmpeg` and blinkpy.
+You need Docker with Compose, and an Ollama server with a vision model that is reachable from the container. The image takes care of everything else, including `ffmpeg` and blinkpy. It is published on GitHub's registry as `ghcr.io/gudlyf/blynky`, for amd64 and arm64 (Apple Silicon, Raspberry Pi 4 and 5).
 
 ```bash
 git clone https://github.com/gudlyf/blynky.git
 cd blynky
 cp .env.example .env     # at least set OLLAMA_URL and OLLAMA_MODEL
-docker compose up -d
+docker compose up -d     # pulls the image
 ```
 
 Open <http://127.0.0.1:8080> and sign in with your Blink email and password, plus a 2FA code if Blink asks for one. Polling starts right away, without a restart. The session token is saved in `data/`, so you won't be asked again after a restart.
@@ -112,7 +112,7 @@ Keep these in mind too:
 
 Every setting is an environment variable, and all of them are optional. Put them in `.env` (start from [`.env.example`](.env.example)) or set them in the shell. A value already set in the environment beats the one in `.env`.
 
-**Under Docker,** `docker-compose.yml` fixes `HOST`, `PORT`, `DATA_DIR` and `CREDFILE`. To choose which host address the port is published on, use `BIND_ADDR` and `HOST_PORT` (default `127.0.0.1:8080`) instead.
+**Under Docker,** `docker-compose.yml` fixes `HOST`, `PORT`, `DATA_DIR` and `CREDFILE`. To choose which host address the port is published on, use `BIND_ADDR` and `HOST_PORT` (default `127.0.0.1:8080`) instead. `BLYNKY_TAG` picks which published image it pulls, `latest` by default; see [The published image](docs/guide.md#the-published-image) for the tags and how to upgrade.
 
 <details open>
 <summary><strong>Core</strong></summary>
