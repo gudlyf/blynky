@@ -1,6 +1,14 @@
 services:
   blynky:
-    image: blynky:latest
+    # Pulled from GitHub's registry, built for amd64 and arm64 from each
+    # release tag. BLYNKY_TAG in .env pins a release (0.4.0) or a minor line
+    # (0.4); latest is the newest release, edge is main. To upgrade:
+    #
+    #   docker compose pull && docker compose up -d
+    #
+    # `docker compose build` builds it from this checkout instead, under the
+    # same name, until the next pull replaces it.
+    image: ghcr.io/gudlyf/blynky:${BLYNKY_TAG:-latest}
     build:
       # blinkpy is fetched during the build, so the context is just this repo.
       context: .
