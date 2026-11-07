@@ -3,9 +3,11 @@
 #
 #   git tag -a v0.4.1 -m v0.4.1 <commit> && git push origin v0.4.1
 #
-# gives 0.4.1, 0.4 and latest. Running it by hand from the Actions tab on main
-# gives edge instead, to try main before tagging it. A pull request that
-# touches the image builds both architectures and publishes nothing.
+# gives 0.4.1, 0.4 and latest, and then a GitHub release for the tag, its
+# notes generated from the pull requests merged since the last one. Running it
+# by hand from the Actions tab on main gives edge instead, to try main before
+# tagging it, and no release. A pull request that touches the image builds
+# both architectures and publishes nothing.
 #
 # Each architecture builds on a runner of its own kind rather than under
 # emulation, which is far faster for the arm64 one; the last job joins the two
@@ -13,8 +15,8 @@
 # image the build stage uses comes in no other.
 #
 # Free for a public repository: the runners, the cache and ghcr.io storage and
-# pulls. The first image published is private; make the package public once,
-# in its settings on GitHub, and every later one is too.
+# pulls. The package takes its visibility from this public repository; were
+# it ever private, it is made public once, in its settings on GitHub.
 #
 # Actions are pinned by commit, with the release beside it, so a moved tag
 # cannot change what runs with a token that can write packages.
@@ -149,3 +151,26 @@ jobs:
 
       - name: Inspect
         run: docker buildx imagetools inspect "${{ env.IMAGE }}:${{ steps.meta.outputs.version }}"
+
+  # Last, so a release always has its image: a failed build leaves the tag
+  # with neither. A release already there, made by hand or by an earlier run,
+  # is left alone.
+  release:
+    needs: merge
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already has a release"
+            exit 0
+          fi
+          gh release create "$TAG" --verify-tag --generate-notes \
+            --notes "**Docker image** (amd64 and arm64): \`docker pull $IMAGE:${TAG#v}\`"
