@@ -36,7 +36,7 @@ jobs:
           git -C ../blinkpy fetch -q --depth 1 origin "$ref"
           git -C ../blinkpy checkout -q FETCH_HEAD
 
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       # --frozen: the lock file is what gets tested, and a pyproject.toml
       # change without a matching uv.lock fails here rather than in the image.
