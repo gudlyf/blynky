@@ -16,10 +16,21 @@ updates:
       actions:
         patterns: ["*"]
 
+  # New digests only, for the same Python. The Dockerfile builds the virtual
+  # environment on the uv image and runs it on the python image, so the two
+  # must carry the same Python version: a bump to one alone ships an image
+  # whose venv points at an interpreter it was not built for, and cannot
+  # import anything. Moving to a new Python is a change to both FROM lines
+  # together, by hand.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: ghcr.io/astral-sh/uv
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker-compose
     directory: /
