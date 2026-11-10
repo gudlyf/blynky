@@ -57,7 +57,7 @@ Blink has no push API, so Blynky polls, no more often than once a minute so it d
 
 ## Quick start (Docker)
 
-You need Docker with Compose, and an Ollama server with a vision model that is reachable from the container. The image takes care of everything else, including `ffmpeg` and blinkpy. It is published on GitHub's registry as `ghcr.io/gudlyf/blynky`, for amd64 and arm64 (Apple Silicon, Raspberry Pi 4 and 5).
+You need Docker with Compose, and an Ollama server with a vision model that is reachable from the container: `ollama pull gemma4:e4b` gets the default. The image takes care of everything else, including `ffmpeg` and blinkpy. It is published on GitHub's registry as `ghcr.io/gudlyf/blynky`, for amd64 and arm64 (Apple Silicon, Raspberry Pi 4 and 5).
 
 ```bash
 git clone https://github.com/gudlyf/blynky.git
@@ -125,7 +125,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | --- | --- | --- |
 | `VISION_PROVIDER` | `ollama` | Vision provider: `ollama` or `gemini` |
 | `OLLAMA_URL` | `http://localhost:11434/v1` | OpenAI-compatible Ollama endpoint |
-| `OLLAMA_MODEL` | `minimax-m3:cloud` | Vision model for Ollama; any vision-capable model works |
+| `OLLAMA_MODEL` | `gemma4:e4b` | Vision model for Ollama; any vision-capable model works. A `:cloud` model sends the frames to Ollama's servers. See [Choosing a model](docs/guide.md#choosing-a-model) |
 | `PROVIDER_PAUSE` | `0` | Minimum seconds between requests to vision provider |
 | `GEMINI_API_KEY` | unset | Google Gemini API key |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Gemini model name |

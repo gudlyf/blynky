@@ -54,7 +54,11 @@ if VISION_PROVIDER == "gemini" and not GEMINI_API_KEY:
 PROVIDER_PAUSE = _float("PROVIDER_PAUSE", 0)
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
+# Google's Gemma 4 at its 4B-effective size: a vision model that runs on
+# Ollama itself, about 6.5 GB to pull. A model tagged :cloud would run on
+# Ollama's servers instead, and every frame would leave this machine - fine
+# if chosen, but not something a default should do.
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_URL = os.environ.get(
