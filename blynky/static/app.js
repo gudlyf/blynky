@@ -1374,7 +1374,7 @@ async function toggleStar(id) {
   const starred = !record.starred;
   applyStar({ ...record, starred });
   try {
-    const response = await fetch(`/api/library/event/${encodeURIComponent(id)}/star`, {
+    const response = await apiFetch(`/api/library/event/${encodeURIComponent(id)}/star`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ starred }),
@@ -1713,7 +1713,7 @@ function renderPeopleList() {
 async function forgetPerson(slug, reference, done) {
   const query = reference ? `?reference=${encodeURIComponent(reference)}` : "";
   try {
-    const response = await fetch(`/api/people/${encodeURIComponent(slug)}${query}`, {
+    const response = await apiFetch(`/api/people/${encodeURIComponent(slug)}${query}`, {
       method: "DELETE",
     });
     if (!response.ok) throw new Error(response.statusText);
@@ -2422,6 +2422,16 @@ function matchesFilters(record) {
 let socket = null;
 let reconnectTimer = null;
 
+async function checkSession() {
+  try {
+    const response = await fetch("/api/auth");
+    const auth = await response.json();
+    if (auth.enabled && !auth.signed_in) toLogin();
+  } catch {
+    // The server is down, not the session: the reconnect will retry.
+  }
+}
+
 function connect() {
   clearTimeout(reconnectTimer);
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -2434,6 +2444,9 @@ function connect() {
     if (socket !== ws) return;
     setStatus("reconnecting", "down");
     reconnectTimer = setTimeout(connect, 3000);
+    // A refused handshake looks like any other drop - the browser keeps the
+    // status to itself - so ask whether it was the session that ran out.
+    checkSession();
   };
   ws.onerror = () => ws.close();
 
@@ -2689,7 +2702,7 @@ function applyRoute(target, historyState) {
 async function openEvent(id) {
   let record = null;
   try {
-    const response = await fetch(`/api/library/event/${encodeURIComponent(id)}`);
+    const response = await apiFetch(`/api/library/event/${encodeURIComponent(id)}`);
     if (response.ok) record = await response.json();
     else if (response.status !== 404) throw new Error(response.statusText);
   } catch (err) {
@@ -2842,6 +2855,26 @@ function setupSettings() {
   el("open-people").addEventListener("click", openPeople);
   el("open-help").addEventListener("click", openHelp);
   el("report-bug").addEventListener("click", hideMenu);
+  setupSignOut();
+}
+
+// Sign out is only offered when the server has a login to sign out of.
+async function setupSignOut() {
+  const button = el("sign-out");
+  try {
+    const auth = await getJSON("/api/auth");
+    button.hidden = !auth.enabled;
+  } catch {
+    return;
+  }
+  button.addEventListener("click", async () => {
+    hideMenu();
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      location.replace("/login");
+    }
+  });
 }
 
 // ------------------------------------------------------- push notifications
@@ -2877,7 +2910,7 @@ async function setNtfy(payload) {
   const box = el("ntfy-on");
   box.disabled = true;
   try {
-    const response = await fetch("/api/ntfy", {
+    const response = await apiFetch("/api/ntfy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -2954,7 +2987,7 @@ function setupDaily() {
 async function setDaily(box, payload) {
   box.disabled = true;
   try {
-    const response = await fetch("/api/daily", {
+    const response = await apiFetch("/api/daily", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -3043,7 +3076,7 @@ function askDailyBackfill() {
 
 async function startDailyBackfill() {
   try {
-    const response = await fetch("/api/daily/backfill", { method: "POST" });
+    const response = await apiFetch("/api/daily/backfill", { method: "POST" });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     Object.assign(daily, await response.json());
   } catch (err) {
@@ -3054,7 +3087,7 @@ async function startDailyBackfill() {
 
 async function cancelDailyBackfill() {
   try {
-    const response = await fetch("/api/daily/backfill", { method: "DELETE" });
+    const response = await apiFetch("/api/daily/backfill", { method: "DELETE" });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     Object.assign(daily, await response.json());
   } catch (err) {
@@ -3317,6 +3350,7 @@ async function refreshBugLink() {
     `Poll interval: ${info.poll_seconds ?? state.pollSeconds}s`,
     `ntfy configured: ${yesNo(info.ntfy)}`,
     `Known people: ${yesNo(info.identify)}`,
+    `Login: ${yesNo(info.login)}`,
     `Browser: ${navigator.userAgent}`,
     `Installed app: ${standalone ? "yes" : "no"}`,
     `Theme: ${prefs.theme}`,
@@ -3370,8 +3404,27 @@ function showError(id, message) {
   box.hidden = !message;
 }
 
+// With AUTH_USER set, a session that has run out answers 401. Going to the
+// login page beats every button quietly failing; the page brings the browser
+// back here, fragment and all, once signed in.
+function toLogin() {
+  const here = location.pathname + location.search;
+  location.replace(`/login?next=${encodeURIComponent(here)}${location.hash}`);
+}
+
+async function apiFetch(url, options) {
+  const response = await fetch(url, options);
+  if (response.status === 401) {
+    toLogin();
+    // Never settles: the page is going away, and nothing should render an
+    // error in the meantime.
+    return new Promise(() => {});
+  }
+  return response;
+}
+
 async function post(url, payload) {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -3380,7 +3433,7 @@ async function post(url, payload) {
 }
 
 async function getJSON(url) {
-  const response = await fetch(url);
+  const response = await apiFetch(url);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
 }

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0d1014">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Blynky">
+  <meta name="robots" content="noindex">
+  <title>Sign in · Blynky</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="manifest" href="/static/manifest.json">
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" hidden>
+    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M2.5 12.5Q12 3.5 21.5 12.5Q12 21.5 2.5 12.5Z"/><circle cx="12" cy="12.5" r="3.5"/></symbol>
+  </svg>
+
+  <!-- Blynky's own login, set by AUTH_USER and AUTH_PASSWORD on the server.
+       Nothing to do with the Blink account, which is asked for after this
+       if the server has not signed in to Blink yet. -->
+  <div class="overlay">
+    <form class="login" id="auth-form" autocomplete="on">
+      <svg class="icon login-logo" aria-hidden="true"><use href="#i-logo"/></svg>
+      <h2>Sign in to Blynky</h2>
+      <p class="hint">
+        This browser stays signed in until you sign out from the settings
+        menu, or goes unused for longer than the server allows.
+      </p>
+      <label for="user">Username</label>
+      <input type="text" id="user" name="username" autocomplete="username"
+             autocapitalize="none" spellcheck="false" required autofocus>
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password"
+             autocomplete="current-password" required>
+      <button type="submit" id="auth-submit">Sign in</button>
+      <p class="error" id="auth-error" role="alert" hidden></p>
+    </form>
+  </div>
+
+  <script src="/static/login.js"></script>
+</body>
+</html>

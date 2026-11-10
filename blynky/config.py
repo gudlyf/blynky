@@ -195,8 +195,8 @@ NTFY_URL = os.environ.get("NTFY_URL", "").strip()
 
 # Where this server is reached from a phone, such as https://blynky.home.lan
 # or http://192.168.1.20:8080. Set, tapping a notification opens the capture it
-# is about. Blynky has no login of its own, so this should be an address only
-# you can reach - a LAN, a VPN or a tailnet - and never a port open to the
+# is about. Without AUTH_USER Blynky has no login, so this should be an address
+# only you can reach - a LAN, a VPN or a tailnet - and never a port open to the
 # internet. It also travels inside every notification, so anyone subscribed to
 # the topic sees it.
 BLYNKY_URL = os.environ.get("BLYNKY_URL", "").strip().rstrip("/")
@@ -212,6 +212,28 @@ ALLOWED_HOSTS = {
     for part in os.environ.get("ALLOWED_HOSTS", "").split(",")
     if part.strip()
 }
+
+# An optional login in front of the whole UI: one username and password, set
+# here, nothing to do with the Blink account. Off unless both are set, so an
+# existing install behaves as before. It keeps a stranger who reaches the
+# port from the cameras; it does not make plain HTTP private, so the advice
+# to stay behind tailscale serve or another HTTPS proxy stands.
+AUTH_USER = os.environ.get("AUTH_USER", "").strip()
+AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
+if bool(AUTH_USER) != bool(AUTH_PASSWORD):
+    raise SystemExit("Set both AUTH_USER and AUTH_PASSWORD, or neither.")
+if AUTH_PASSWORD and len(AUTH_PASSWORD) < 8:
+    raise SystemExit("AUTH_PASSWORD must be at least 8 characters.")
+AUTH_ENABLED = bool(AUTH_USER and AUTH_PASSWORD)
+
+# How long one sign-in lasts, in days. Long on purpose: a phone signs in once.
+# Each use in the second half of that time starts it over, so a device used
+# now and then never has to sign in again.
+AUTH_SESSION_DAYS = max(1, int(os.environ.get("AUTH_SESSION_DAYS", "365")))
+
+# The key sessions are signed with, made on first use. Deleting it signs out
+# every device; so does changing AUTH_USER or AUTH_PASSWORD.
+SESSION_SECRET = DATA_DIR / ".session_secret"
 
 # Send each system's notifications to a topic of its own: <system>-<topic>
 # beside NTFY_URL's, such as https://ntfy.sh/cabin-mytopic, so a phone can

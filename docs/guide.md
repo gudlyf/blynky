@@ -83,6 +83,7 @@ server acts on them, so a change there holds for everyone.
   [Daily summaries](#daily-summaries).
 - **Known people…** — see [Known people](#known-people).
 - **Full screen**, and **Keyboard shortcuts**.
+- **Sign out** — only with [the login](#signing-in) turned on.
 - **Report a bug…** — opens a new GitHub issue with your Blynky, blinkpy and
   Python versions, camera counts and browser already filled in. It never
   includes camera names, addresses or account details, and nothing is sent
@@ -518,7 +519,7 @@ no link.
 Two things to settle before setting it:
 
 - **Point it somewhere only you can reach.** The link opens a server with no
-  login, so it should be a tailnet name from `tailscale serve`, a VPN address
+  login unless [`AUTH_USER`](#signing-in) is set, so it should be a tailnet name from `tailscale serve`, a VPN address
   or a LAN address, and never a port forward or `tailscale funnel` (see
   [Reaching it from other devices](#reaching-it-from-other-devices)). The link
   only works where the phone can reach that address: a LAN address won't open
@@ -954,7 +955,8 @@ and win over it, because in a container the file's values are wrong:
 
 Publishing is controlled separately, and defaults to loopback for the reason
 described in [Reaching it from other devices](#reaching-it-from-other-devices)
-— the UI still has no authentication of its own. In `.env`:
+— the UI has no authentication unless [`AUTH_USER`](#signing-in) is set. In
+`.env`:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -1009,10 +1011,13 @@ tailnet address instead is equally fine, and still needs Ollama listening on
 the interface that address belongs to.
 ## Reaching it from other devices
 
-The UI has **no authentication of its own**. Anyone who can reach the port
-sees your camera stills, clips, and descriptions — and if the sign-in panel
-happens to be up, can submit credentials over plain HTTP. The default
-`127.0.0.1` binding keeps that on this machine.
+Unless you turn on [the login](#signing-in), the UI has **no
+authentication**. Anyone who can reach the port sees your camera stills,
+clips, and descriptions — and if the Blink sign-in panel happens to be up, can
+submit credentials over plain HTTP. The default `127.0.0.1` binding keeps that
+on this machine. The login is worth having on top of any of these, but it is a
+lock on the door, not a private network: keep the address one only your own
+devices can reach.
 
 Over Tailscale, best to worst:
 
@@ -1049,7 +1054,8 @@ Over Tailscale, best to worst:
    are on. Avoid unless you know the network.
 
 Never put this behind `tailscale funnel`: that publishes it to the open
-internet, and there is no login to stop anyone who finds it.
+internet, where a single password is all that would stand between anyone who
+finds it and your cameras — and without `AUTH_USER`, nothing at all.
 
 ### The names it answers to
 
@@ -1076,6 +1082,58 @@ browser. A request that changes something, and the live WebSocket, is refused
 when the browser reports it comes from another site (`Origin`,
 `Sec-Fetch-Site`). Request bodies must be `application/json`, which a form on
 another page can't send. Neither affects `curl`, which sends no `Origin`.
+
+## Signing in
+
+Blynky can ask for a username and password before it shows anything. It is
+off unless both are set in `.env`:
+
+```bash
+AUTH_USER=me
+AUTH_PASSWORD=a-long-random-password
+```
+
+This is Blynky's own login, separate from the Blink account. With it on, every
+page, clip, still and API call, and the live WebSocket, needs a session. A
+browser without one is sent to a sign-in page, and comes back to where it was
+going afterwards — including a capture opened from a notification. Only the
+sign-in page, the page's own scripts and styles, and `/healthz` for Docker's
+health check answer without one.
+
+**Sessions last a long time.** A browser stays signed in for
+`AUTH_SESSION_DAYS` (365 by default). Using it in the second half of that
+starts the time over, so a phone or wall display that opens Blynky even now
+and then never sees the sign-in page again. Sessions survive a restart. A
+home-screen app keeps its session like the browser does.
+
+**Signing out.** **Sign out** in the settings menu ends that browser's
+session. To sign out every device at once, change `AUTH_USER` or
+`AUTH_PASSWORD` and restart, or delete `data/.session_secret` (the key
+sessions are signed with, made on first use) and restart.
+
+**Wrong passwords.** After five wrong attempts in a row, the next one has to
+wait 30 seconds, then 60, doubling up to 15 minutes; a right one resets it.
+The count is for the whole server rather than per device, because behind
+`tailscale serve` every browser arrives from the same address. Each failure is
+logged with the device's address (from `X-Forwarded-For` behind a local
+proxy), never the password tried.
+
+What it is and isn't:
+
+- **It keeps out a stranger who finds the port** — someone on the same Wi-Fi,
+  or a device on your tailnet you share with others.
+- **It doesn't make plain HTTP private.** Over `http://` on a LAN, the
+  password and the session cookie cross the network readable by anyone who can
+  watch it. Behind `tailscale serve` or another HTTPS proxy they don't, and
+  the cookie is marked `Secure` there. So the advice in
+  [Reaching it from other devices](#reaching-it-from-other-devices) stands.
+- **The password sits in `.env` in plain text**, like the Gemini key. Make it
+  one you use nowhere else.
+- **It is one account.** Everyone signed in sees and can change the same
+  things, as before.
+
+Under Docker, Blynky's health check uses `/healthz`, which says nothing but
+"up", so the container stays healthy with the login on.
 
 ## Notes
 

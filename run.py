@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from pathlib import Path
 
 from aiohttp import ClientSession, web
 
@@ -46,6 +47,19 @@ async def main():
             ) from None
 
         _LOGGER.info("http://%s:%s", config.HOST, config.PORT)
+        if config.AUTH_ENABLED:
+            _LOGGER.info("login is on, as %s", config.AUTH_USER)
+        elif config.HOST not in ("127.0.0.1", "localhost", "::1") and not (
+            Path("/.dockerenv").exists()
+        ):
+            # Under Docker HOST is always 0.0.0.0 and BIND_ADDR decides, which
+            # this cannot see; outside it, this is the whole of the exposure.
+            _LOGGER.warning(
+                "listening on %s with no login: anyone who can reach this "
+                "port sees the cameras. Set AUTH_USER and AUTH_PASSWORD, or "
+                "HOST=127.0.0.1 behind tailscale serve",
+                config.HOST,
+            )
         try:
             await asyncio.Event().wait()
         finally:

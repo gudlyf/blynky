@@ -73,3 +73,15 @@ async def client(aiohttp_client):
     await monitor.people.load()
     app = server.create_app(monitor)
     return await aiohttp_client(app)
+
+
+@pytest.fixture
+async def make_client(aiohttp_client):
+    """Return a factory for test clients with a given Auth."""
+
+    async def make(login):
+        monitor = FakeMonitor()
+        await monitor.people.load()
+        return await aiohttp_client(server.create_app(monitor, gate=login))
+
+    return make

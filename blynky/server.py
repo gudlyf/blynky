@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import WSMsgType, web
 
-from . import config, daily, guard, library, notify
+from . import auth, config, daily, guard, library, notify
 
 _LOGGER = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -116,6 +116,7 @@ async def diagnostics(request):
             "poll_seconds": config.POLL_SECONDS,
             "ntfy": bool(config.NTFY_URL),
             "identify": config.IDENTIFY,
+            "login": config.AUTH_ENABLED,
         }
     )
 
@@ -524,19 +525,28 @@ async def revalidate_ui(request, response):
     not obviously fix. no-cache still keeps the copy; it only has to be
     confirmed, which costs a 304. Media is left alone: a capture never changes.
     """
-    if request.path == "/" or request.path.startswith("/static/"):
+    if request.path in ("/", "/login") or request.path.startswith("/static/"):
         response.headers.setdefault("Cache-Control", "no-cache")
 
 
-def create_app(monitor):
-    """Build the aiohttp application."""
+def create_app(monitor, gate=None):
+    """Build the aiohttp application.
+
+    gate is the Auth to use, for tests; by default it follows AUTH_USER and
+    AUTH_PASSWORD.
+    """
     config.LATEST_DIR.mkdir(parents=True, exist_ok=True)
     config.EVENT_DIR.mkdir(parents=True, exist_ok=True)
     config.STILL_DIR.mkdir(parents=True, exist_ok=True)
     config.PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
 
-    app = web.Application(middlewares=[guard.Guard().middleware])
+    # The guard first: a request for a name this server is not known by, or
+    # from another site, is refused before the session is even looked at.
+    gate = gate or auth.Auth()
+    app = web.Application(middlewares=[guard.Guard().middleware, gate.middleware])
     app["monitor"] = monitor
+    app["auth"] = gate
+    gate.setup(app)
     app.on_response_prepare.append(revalidate_ui)
     app.on_response_prepare.append(guard.security_headers)
     app.router.add_get("/", index)

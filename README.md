@@ -90,9 +90,11 @@ That commit is on the `blynky` branch of [gudlyf/blinkpy](https://github.com/gud
 ## Security
 
 > [!WARNING]
-> **Blynky has no login of its own.** Anyone who can reach the port can see your cameras, clips and descriptions.
+> **Out of the box, Blynky has no login.** Anyone who can reach the port can see your cameras, clips and descriptions.
 
-For that reason it listens on `127.0.0.1` by default. To reach it from your other devices, the best option is to put it behind something that adds HTTPS and limits who can connect, such as [`tailscale serve`](https://tailscale.com/kb/1312/serve). Best is as a [Tailscale Service](https://tailscale.com/blog/services-beta), which gives Blynky a name of its own, `https://blynky.your-tailnet.ts.net`. Define `blynky` under Services in the admin console, listening on TCP 443, then on this machine (which must carry a tag):
+You can turn on a simple login: set `AUTH_USER` and `AUTH_PASSWORD` in `.env` (one username and password, nothing to do with your Blink account). Every page, clip and API call then needs a sign-in, and each browser stays signed in for a year, renewed while you keep using it. See [Signing in](docs/guide.md#signing-in). It keeps out a stranger who finds the port. It doesn't make plain HTTP private, so the advice below still applies.
+
+Blynky listens on `127.0.0.1` by default. To reach it from your other devices, the best option is to put it behind something that adds HTTPS and limits who can connect, such as [`tailscale serve`](https://tailscale.com/kb/1312/serve). Best is as a [Tailscale Service](https://tailscale.com/blog/services-beta), which gives Blynky a name of its own, `https://blynky.your-tailnet.ts.net`. Define `blynky` under Services in the admin console, listening on TCP 443, then on this machine (which must carry a tag):
 
 ```bash
 tailscale serve --service=svc:blynky --https=443 127.0.0.1:8080
@@ -108,7 +110,7 @@ Keep these in mind too:
 - **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. With **Send to ntfy** on, so does a summary of each camera's day. Use a long, random topic name or a self-hosted ntfy server.
 - **The names it answers to.** Blynky only answers requests addressed to an IP address, `localhost`, the host in `BLYNKY_URL`, or a name listed in `ALLOWED_HOSTS`. Anything else gets an error that names the setting to change. This stops a web page you visit from reaching Blynky through a DNS name it controls. If you open Blynky by a name such as `nas.local`, or by a `tailscale serve` name that isn't your `BLYNKY_URL`, add it to `ALLOWED_HOSTS`.
 - **Other sites can't use your browser against it.** Anything that changes a setting, and the live connection, is refused when the browser says it comes from another site, and request bodies must be JSON.
-- **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet: the link goes to a server with no login. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
+- **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet, even with `AUTH_USER` set. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
 
 ## Configuration
 
@@ -130,6 +132,8 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `GEMINI_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini OpenAI-compatible base URL |
 | `GEMINI_PAUSE` | unset | Overrides `PROVIDER_PAUSE` when `VISION_PROVIDER` is `gemini` (e.g. `4.5` to avoid RPM rate limits) |
 | `HOST` / `PORT` | `127.0.0.1` / `8080` | Where the UI listens |
+| `AUTH_USER` / `AUTH_PASSWORD` | unset | Turn on a login for the UI: one username and a password of at least 8 characters, separate from Blink's. Off unless both are set. See [Signing in](docs/guide.md#signing-in) |
+| `AUTH_SESSION_DAYS` | `365` | How long a browser stays signed in, renewed while in use |
 | `ALLOWED_HOSTS` | unset | Names, besides `BLYNKY_URL`'s, that Blynky answers to, comma separated, such as `nas.local`. IP addresses and `localhost` always work. See [Security](#security) |
 | `POLL_SECONDS` | `60` | Seconds between Blink polls (minimum 60) |
 | `DATA_DIR` | `./data` | Where clips, stills and state are written |
@@ -227,6 +231,7 @@ data/
   daily/_location-<system>/, daily/_all/  the same for a location, or every camera
   cameras.json                            every name each camera has had
   ntfy.json, daily.json                   settings changed from the settings menu
+  .session_secret                         signs login sessions, when AUTH_USER is set
 ```
 
 Only `events/`, `stills/`, `latest/` and `people/` are served to the browser, under `/media/`, and never a JSON or hidden file from them. The settings files, the daily summaries' files and, under Docker, `.blink_creds.json` sit in `DATA_DIR` too, and the server refuses them.
