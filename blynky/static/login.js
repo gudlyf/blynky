@@ -18,6 +18,15 @@ function nextPath() {
   return url.pathname + url.search + location.hash;
 }
 
+// Already signed in - another tab got there first, or the back button -
+// means there is nothing to ask for: go straight on.
+fetch("/api/auth")
+  .then((response) => response.json())
+  .then((auth) => {
+    if (!auth.enabled || auth.signed_in) location.replace(nextPath());
+  })
+  .catch(() => {});
+
 const form = document.getElementById("auth-form");
 const button = document.getElementById("auth-submit");
 const error = document.getElementById("auth-error");
