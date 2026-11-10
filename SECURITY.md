@@ -22,6 +22,10 @@ release branches.
 - Ways to read clips, stills, descriptions or credentials **without network
   access to the UI's port**, such as path traversal through `/media/` or the
   API, or leaks into logs or notifications
+- Ways for another web page to read from or act on Blynky through the owner's
+  browser, such as DNS rebinding or cross-site requests getting past the
+  Host, Origin and content-type checks
+- Ways to read or delete files outside the archive through the API
 - Anything that exposes `.blink_creds.json` or the Blink session token
 - Injection through camera names, descriptions or other values that reach the
   page or the filesystem

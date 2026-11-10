@@ -106,6 +106,8 @@ Keep these in mind too:
 
 - **The credentials file.** `.blink_creds.json` holds your Blink password in plain text next to the tokens, because blinkpy stores it that way. Blynky makes it readable only by you (`chmod 600`), and `.gitignore` and `.dockerignore` both exclude it.
 - **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. With **Send to ntfy** on, so does a summary of each camera's day. Use a long, random topic name or a self-hosted ntfy server.
+- **The names it answers to.** Blynky only answers requests addressed to an IP address, `localhost`, the host in `BLYNKY_URL`, or a name listed in `ALLOWED_HOSTS`. Anything else gets an error that names the setting to change. This stops a web page you visit from reaching Blynky through a DNS name it controls. If you open Blynky by a name such as `nas.local`, or by a `tailscale serve` name that isn't your `BLYNKY_URL`, add it to `ALLOWED_HOSTS`.
+- **Other sites can't use your browser against it.** Anything that changes a setting, and the live connection, is refused when the browser says it comes from another site, and request bodies must be JSON.
 - **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet: the link goes to a server with no login. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
 
 ## Configuration
@@ -128,6 +130,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `GEMINI_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini OpenAI-compatible base URL |
 | `GEMINI_PAUSE` | unset | Overrides `PROVIDER_PAUSE` when `VISION_PROVIDER` is `gemini` (e.g. `4.5` to avoid RPM rate limits) |
 | `HOST` / `PORT` | `127.0.0.1` / `8080` | Where the UI listens |
+| `ALLOWED_HOSTS` | unset | Names, besides `BLYNKY_URL`'s, that Blynky answers to, comma separated, such as `nas.local`. IP addresses and `localhost` always work. See [Security](#security) |
 | `POLL_SECONDS` | `60` | Seconds between Blink polls (minimum 60) |
 | `DATA_DIR` | `./data` | Where clips, stills and state are written |
 | `CREDFILE` | `./.blink_creds.json` | Where the Blink session token is saved |
@@ -225,6 +228,8 @@ data/
   cameras.json                            every name each camera has had
   ntfy.json, daily.json                   settings changed from the settings menu
 ```
+
+Only `events/`, `stills/`, `latest/` and `people/` are served to the browser, under `/media/`, and never a JSON or hidden file from them. The settings files, the daily summaries' files and, under Docker, `.blink_creds.json` sit in `DATA_DIR` too, and the server refuses them.
 
 `scripts/rename_camera.py` moves a camera's existing archive to its new name. See [Refiling what was already captured](docs/guide.md#refiling-what-was-already-captured).
 

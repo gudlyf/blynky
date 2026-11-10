@@ -14,14 +14,7 @@
   <link rel="manifest" href="/static/manifest.json">
   <!-- Applied before the stylesheet so a chosen theme never flashes the
        other one first. -->
-  <script>
-    try {
-      const theme = localStorage.getItem("blynky.theme");
-      if (theme === "light" || theme === "dark") {
-        document.documentElement.dataset.theme = theme;
-      }
-    } catch (err) {}
-  </script>
+  <script src="/static/theme.js"></script>
   <!-- The ?v= is for browsers still holding a copy cached before the server
        sent Cache-Control; since then every load revalidates anyway. -->
   <link rel="stylesheet" href="/static/style.css?v=3">

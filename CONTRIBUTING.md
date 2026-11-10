@@ -38,11 +38,19 @@ To try the Docker build, run `docker compose up -d --build`.
 1. Fork the repo and create a branch from `main`.
 2. Keep the change focused. One fix or feature per pull request is easiest to
    review.
-3. Run the linter. It covers formatting rules and docstrings:
+3. Run the linter and the tests. The linter covers formatting rules and
+   docstrings; the tests cover the HTTP layer - what the server serves, and
+   what it refuses:
 
    ```bash
    uv run ruff check .
+   uv run ruff format --check .
+   uv run pytest
    ```
+
+   The tests run against a temporary data folder and never read your `.env`
+   settings that matter, so they are safe beside a real install. A change to
+   what the server accepts or serves should come with a test.
 
 4. Test it against real cameras if you can, and say in the pull request what
    you tried. Blink's API is unofficial and is not mocked here, so a

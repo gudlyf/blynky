@@ -1051,6 +1051,32 @@ Over Tailscale, best to worst:
 Never put this behind `tailscale funnel`: that publishes it to the open
 internet, and there is no login to stop anyone who finds it.
 
+### The names it answers to
+
+Blynky checks the `Host` header on every request and answers only to an IP
+address, `localhost`, the host in `BLYNKY_URL`, and the names in
+`ALLOWED_HOSTS`:
+
+```bash
+ALLOWED_HOSTS=nas.local,blynky.home.lan
+```
+
+Without that check, a web page open in your browser could point a DNS name it
+controls at `127.0.0.1` (DNS rebinding) and read Blynky as if it were its own
+site. An address can't be rebound, which is why addresses always work.
+
+A refused name gets `421 Misdirected Request`, with the setting to change in
+the body and in the server log. Through `tailscale serve` the name is the
+`ts.net` one, so either set `BLYNKY_URL` to it (worth doing anyway, for
+notification links) or list it in `ALLOWED_HOSTS`. `ALLOWED_HOSTS=*` turns the
+check off.
+
+Two more checks cover the rest of what another site could do through your
+browser. A request that changes something, and the live WebSocket, is refused
+when the browser reports it comes from another site (`Origin`,
+`Sec-Fetch-Site`). Request bodies must be `application/json`, which a form on
+another page can't send. Neither affects `curl`, which sends no `Origin`.
+
 ## Notes
 
 Blink has no push API, so this polls. blinkpy's README warns that calls faster
