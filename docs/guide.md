@@ -413,6 +413,30 @@ A description arriving for a clip captured weeks ago updates the row it
 belongs to and nothing else: it does not flash a card, jump the view, or take
 the top of the timeline.
 
+## Choosing a model
+
+The default, `gemma4:e4b`, is Google's Gemma 4 at its 4B-effective size. It
+runs on your own Ollama, so the frames never leave the machine, and it fits
+in about 6.5 GB:
+
+```bash
+ollama pull gemma4:e4b
+```
+
+Any Ollama model that takes images works; set `OLLAMA_MODEL` to it.
+`qwen3-vl:8b` is a good alternative of about the same size. Larger models give
+better descriptions if the machine has the memory for them, smaller ones
+answer faster.
+
+A model whose tag ends in `:cloud` is different: Ollama runs it on its own
+servers, so every frame Blynky sends, and every description and daily summary,
+leaves your machine. That can be worth it on hardware too small to run a
+vision model, but it is a choice to make knowingly. [Gemini](#using-gemini-as-an-alternative-model)
+is the same trade, through Google.
+
+If the model hasn't been pulled, the first motion clip logs `vision model
+returned 404` with Ollama's reason, that the model was not found.
+
 ## Using Gemini as an alternative model
 
 By default, Blynky uses a local vision model hosted on Ollama. If you prefer not

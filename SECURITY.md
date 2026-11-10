@@ -14,8 +14,10 @@ published with credit to you, unless you would rather stay anonymous.
 
 ## Supported versions
 
-Only the latest commit on `main` is supported. There are no maintained
-release branches.
+Only the latest release, and `main`, get security fixes. There are no
+maintained release branches: a fix lands on `main` and ships in the next
+release and the `latest` image. Upgrade with `docker compose pull && docker
+compose up -d`.
 
 ## What is in scope
 
@@ -47,6 +49,9 @@ release branches.
 - `.blink_creds.json` storing the Blink password in plain text. blinkpy stores
   it that way. Blynky makes the file readable only by its owner (`chmod 600`)
   and excludes it from git and Docker builds.
+- Frames, descriptions and summaries going to Ollama's or Google's servers
+  when a `:cloud` Ollama model or Gemini is chosen. That is what those
+  options are, and the docs say so. The default model runs locally.
 - Problems in blinkpy, Ollama or ntfy themselves. Report those upstream. Do
   report how Blynky uses them, though.
 
