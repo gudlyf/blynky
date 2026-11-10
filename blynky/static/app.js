@@ -1448,10 +1448,11 @@ function openViewer(index) {
     // poster frame, so the video goes straight on screen ready to play.
     // Assigning src reloads the video even when the URL has not changed, so a
     // description landing mid-playback would otherwise restart the clip.
-    if (video.getAttribute("src") !== record.clip) {
+    const clip = mediaUrl(record.clip);
+    if (video.getAttribute("src") !== clip) {
       video.pause();
-      video.src = record.clip;
-      if (record.image) video.poster = record.image;
+      video.src = clip;
+      if (record.image) video.poster = mediaUrl(record.image);
       else video.removeAttribute("poster");
     }
     video.hidden = false;
@@ -1461,7 +1462,7 @@ function openViewer(index) {
     video.pause();
     video.removeAttribute("src");
     video.hidden = true;
-    img.src = record.image || "";
+    img.src = mediaUrl(record.image);
     img.alt = `${record.camera} at ${fullTime(record.stamp)}`;
     img.hidden = false;
   }
@@ -1469,7 +1470,7 @@ function openViewer(index) {
   setStar(el("viewer-star"), record.starred);
 
   const download = el("viewer-download");
-  download.href = record.clip || record.image || "#";
+  download.href = mediaUrl(record.clip || record.image) || "#";
   download.hidden = !(record.clip || record.image);
 
   const summary = el("viewer-summary");
@@ -1689,7 +1690,7 @@ function renderPeopleList() {
         item.className = "ref";
         item.style.margin = "0";
         const img = document.createElement("img");
-        img.src = ref.url;
+        img.src = mediaUrl(ref.url);
         img.alt = `Example of ${person.name}`;
         img.loading = "lazy";
         if (ref.added) img.title = `Added ${fullTime(ref.added)}`;

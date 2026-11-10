@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from slugify import slugify
 
 from . import config, media
+from .files import write_atomic
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -303,8 +304,9 @@ async def write_sidecar(record):
 
 
 def _write_text(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    # Aside and renamed into place: a sidecar is the only record of a clip's
+    # description and star, and a crash mid-write must not lose both.
+    write_atomic(path, text)
 
 
 def _still_path(record):
@@ -542,18 +544,20 @@ class Library:
 
     def find(self, event_id):
         """Return one record by id, or None."""
-        for record in self._records:
-            if record["id"] == event_id:
-                return record
-        return None
+        return self._by_id.get(event_id)
 
     def remove(self, record):
-        """Drop one record from the index. Returns True if it was there."""
-        for position, held in enumerate(self._records):
-            if held["id"] == record["id"]:
-                del self._records[position]
-                return True
-        return False
+        """Drop one record from the index. Returns True if it was there.
+
+        From both halves of it: left in _by_id, a capture that came back later
+        (Sync re-downloading a clip retention deleted) would update the orphan
+        and never reappear in the list until a restart.
+        """
+        held = self._by_id.pop(record["id"], None)
+        if held is None:
+            return False
+        self._records = [r for r in self._records if r["id"] != record["id"]]
+        return True
 
     def apply_names(self, mapping):
         """Adopt real camera names once Blink has told us what they are."""
