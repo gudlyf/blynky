@@ -71,7 +71,7 @@ COPY scripts ./scripts
 RUN uv sync --frozen --no-dev
 
 
-FROM python:3.13-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 
 # ffmpeg samples frames out of each clip; without it the app silently falls
 # back to the single snapshot, which is a much worse description.
