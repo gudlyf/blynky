@@ -21,7 +21,7 @@ import os
 import secrets
 import time
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 from aiohttp import web
 
@@ -75,22 +75,6 @@ def _load_secret(path):
         handle.write(data)
     _LOGGER.info("made a new session key in %s", path)
     return data
-
-
-def safe_next(value):
-    """Return value if it is a path on this server, else "/".
-
-    Only a path: never //host, or a backslash after the slash, which a
-    browser reads as another site, and never a scheme.
-    """
-    if not value or any(ord(c) < 0x20 for c in value):
-        return "/"
-    # Browsers read a backslash as a slash, so /\\host is //host to them.
-    value = value.replace("\\", "/")
-    parts = urlsplit(value)
-    if parts.scheme or parts.netloc or not value.startswith("/"):
-        return "/"
-    return value
 
 
 def client_address(request):
@@ -235,9 +219,15 @@ class Auth:
     # ------------------------------------------------------------- handlers
 
     async def login_page(self, request):
-        """Serve the sign-in page, or go straight in when there is no need."""
-        if not self.enabled or self.signed_in(request):
-            raise web.HTTPFound(safe_next(request.query.get("next")))
+        """Serve the sign-in page.
+
+        Served signed in too: login.js asks /api/auth and goes on to ?next=
+        itself. The server never redirects to a target taken from the
+        request, so there is no open redirect here to get wrong; the one
+        check of ?next= lives in login.js.
+        """
+        if not self.enabled:
+            raise web.HTTPFound("/")
         return web.FileResponse(LOGIN_PAGE)
 
     async def status(self, request):

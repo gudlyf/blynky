@@ -89,23 +89,6 @@ def test_secret_is_private(login, secret):
     assert secret.stat().st_mode & 0o777 == 0o600
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("/#/event/x", "/#/event/x"),
-        ("/library?q=dog", "/library?q=dog"),
-        ("//evil.example", "/"),
-        ("/\\evil.example", "/"),
-        ("https://evil.example", "/"),
-        ("", "/"),
-        (None, "/"),
-        ("/\r\nSet-Cookie: x", "/"),
-    ],
-)
-def test_safe_next(value, expected):
-    assert auth.safe_next(value) == expected
-
-
 # -------------------------------------------------------------- signed out
 
 
@@ -199,9 +182,11 @@ async def test_signed_in_reaches_everything(client):
     ws = await client.ws_connect("/ws")
     assert (await ws.receive_json())["type"] == "state"
     await ws.close()
+    # Served, not redirected: the page itself goes on to ?next=, after its
+    # own check, so nothing from the request ever becomes a Location.
     login_page = await client.get("/login?next=//evil.example", allow_redirects=False)
-    assert login_page.status == 302
-    assert login_page.headers["Location"] == "/"
+    assert login_page.status == 200
+    assert "Location" not in login_page.headers
 
 
 async def test_sign_out(client):
