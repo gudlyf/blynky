@@ -33,6 +33,13 @@ uv run run.py
 
 To try the Docker build, run `docker compose up -d --build`.
 
+`uv.lock` is committed and is what both the image and CI install, with
+`--frozen`. After changing a dependency in `pyproject.toml`, run `uv lock`
+and commit the lock with it; to move every package to its newest allowed
+version, `uv lock --upgrade`. Dependabot proposes updates for the Actions and
+the Docker images, but not for Python packages, which it cannot re-lock
+without the blinkpy checkout beside the repo.
+
 ## Making a change
 
 1. Fork the repo and create a branch from `main`.
@@ -50,7 +57,8 @@ To try the Docker build, run `docker compose up -d --build`.
 
    The tests run against a temporary data folder and never read your `.env`
    settings that matter, so they are safe beside a real install. A change to
-   what the server accepts or serves should come with a test.
+   what the server accepts or serves should come with a test. CI runs all
+   three on every pull request.
 
 4. Test it against real cameras if you can, and say in the pull request what
    you tried. Blink's API is unofficial and is not mocked here, so a

@@ -276,6 +276,11 @@ NTFY_SUBJECTS = tuple(
 NTFY_PRIORITY = _int("NTFY_PRIORITY", 4)
 NTFY_TIMEOUT = _int("NTFY_TIMEOUT", 15)
 
+# An access token for an ntfy server that requires one (ntfy token add, on
+# the server), sent as a Bearer token. Better than a user:password in
+# NTFY_URL, which ends up anywhere the URL is shown.
+NTFY_TOKEN = os.environ.get("NTFY_TOKEN", "").strip()
+
 # Priority for someone the model recognised. The default keeps them but drops
 # them below a stranger, which is the whole point of enrolling anyone.
 NTFY_KNOWN_PRIORITY = _int("NTFY_KNOWN_PRIORITY", 2)

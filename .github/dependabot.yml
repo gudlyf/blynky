@@ -1,0 +1,27 @@
+# Weekly proposals for what Blynky is built from: the Actions in .github/
+# workflows (pinned by commit), the base images in the Dockerfile and the ntfy
+# image in docker-compose.yml (pinned by digest).
+#
+# Python packages are left out: uv.lock resolves blinkpy from ../blinkpy, a
+# sibling checkout Dependabot does not have, so it cannot re-lock. Update them
+# by hand with `uv lock --upgrade` from a development setup (CONTRIBUTING.md).
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly

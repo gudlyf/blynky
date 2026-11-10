@@ -184,6 +184,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |
 | `NTFY_COOLDOWN` | `120` | Seconds before the same camera may alert again |
 | `NTFY_TIMEOUT` | `15` | Seconds before giving up on reaching the ntfy server |
+| `NTFY_TOKEN` | unset | Access token for an ntfy server that requires one, sent as a Bearer token. See [Running your own ntfy server](docs/guide.md#running-your-own-ntfy-server) |
 | `BLYNKY_URL` | unset | Address your phone reaches Blynky at, such as `https://blynky.your-tailnet.ts.net`. When set, tapping a notification opens that capture. See [Security](#security) |
 | `IDENTIFY` | `1` | Guess who a person is, once people have been tagged |
 | `IDENTIFY_MIN_CONFIDENCE` | `high` | Least confidence that counts as a match (`low`, `medium`, `high`) |

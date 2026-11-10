@@ -21,6 +21,9 @@ blinkpy = { path = "../blinkpy" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The project is not installed as a package (no build system), so the tests
+# import it from the checkout.
+pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["ignore::aiohttp.web_exceptions.NotAppKeyWarning"]
