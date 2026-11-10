@@ -196,10 +196,16 @@ class People:
         (path / filename).write_bytes(image)
 
     async def remove_reference(self, slug, filename):
-        """Drop one reference frame."""
+        """Drop one reference frame.
+
+        Only a file this person's manifest lists: the name comes straight from
+        the request, and a path to anything else must never reach unlink().
+        """
         person = self._people.get(slug)
         if person is None:
             raise KeyError(slug)
+        if not any(ref["file"] == filename for ref in person["references"]):
+            raise KeyError(filename)
         person["references"] = [
             ref for ref in person["references"] if ref["file"] != filename
         ]
@@ -207,7 +213,12 @@ class People:
         await self._save(slug)
 
     def _unlink(self, slug, filename):
-        path = dir_for(slug) / filename
+        folder = dir_for(slug).resolve()
+        path = (folder / filename).resolve()
+        if path.parent != folder or path.name == _MANIFEST:
+            # A manifest edited by hand could still list one.
+            _LOGGER.warning("refused to delete %s: not a reference frame", path)
+            return
         try:
             path.unlink()
         except OSError as error:

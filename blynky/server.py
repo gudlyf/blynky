@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import WSMsgType, web
 
-from . import config, daily, library, notify
+from . import config, daily, guard, library, notify
 
 _LOGGER = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -319,7 +319,7 @@ async def forget_person(request):
         elif not await monitor.people.remove(slug):
             raise web.HTTPNotFound(reason="no such person")
     except KeyError:
-        raise web.HTTPNotFound(reason="no such person") from None
+        raise web.HTTPNotFound(reason="no such person or reference") from None
     return web.json_response({"status": "ok", "people": monitor.people.all()})
 
 
@@ -535,9 +535,10 @@ def create_app(monitor):
     config.STILL_DIR.mkdir(parents=True, exist_ok=True)
     config.PEOPLE_DIR.mkdir(parents=True, exist_ok=True)
 
-    app = web.Application()
+    app = web.Application(middlewares=[guard.Guard().middleware])
     app["monitor"] = monitor
     app.on_response_prepare.append(revalidate_ui)
+    app.on_response_prepare.append(guard.security_headers)
     app.router.add_get("/", index)
     app.router.add_get("/api/state", state)
     app.router.add_get("/api/diagnostics", diagnostics)
@@ -565,6 +566,15 @@ def create_app(monitor):
     app.router.add_get("/api/ntfy", ntfy)
     app.router.add_post("/api/ntfy", ntfy)
     app.router.add_get("/ws", websocket)
-    app.router.add_static("/media/", config.DATA_DIR)
+    # Only the folders that hold pictures and clips. DATA_DIR itself also holds
+    # the settings files and, under Docker, the Blink credentials, none of
+    # which a browser has any business fetching.
+    for name, folder in (
+        ("events", config.EVENT_DIR),
+        ("latest", config.LATEST_DIR),
+        ("stills", config.STILL_DIR),
+        ("people", config.PEOPLE_DIR),
+    ):
+        app.router.add_static(f"/media/{name}/", folder)
     app.router.add_static("/static/", STATIC_DIR)
     return app

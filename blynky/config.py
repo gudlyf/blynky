@@ -203,6 +203,16 @@ BLYNKY_URL = os.environ.get("BLYNKY_URL", "").strip().rstrip("/")
 if BLYNKY_URL and not BLYNKY_URL.startswith(("http://", "https://")):
     raise ValueError("BLYNKY_URL must start with http:// or https://")
 
+# Names, beside BLYNKY_URL's, that this server answers to, comma separated:
+# nas.local, blynky.home.lan. An IP address and localhost always work. Any
+# other name is refused, which is what stops a web page from reaching this
+# server through a DNS name it controls (DNS rebinding). * turns the check off.
+ALLOWED_HOSTS = {
+    part.strip().lower().rstrip(".")
+    for part in os.environ.get("ALLOWED_HOSTS", "").split(",")
+    if part.strip()
+}
+
 # Send each system's notifications to a topic of its own: <system>-<topic>
 # beside NTFY_URL's, such as https://ntfy.sh/cabin-mytopic, so a phone can
 # subscribe to one place and not another. ntfy allows only letters, digits,
