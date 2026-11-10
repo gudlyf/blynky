@@ -21,7 +21,7 @@ import os
 import secrets
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from aiohttp import web
 
@@ -41,6 +41,10 @@ _PUBLIC_PREFIXES = ("/static/",)
 # Throttling, global rather than per address: behind tailscale serve every
 # browser arrives from 127.0.0.1, so there is no address to tell them apart by.
 _FREE_FAILURES = 5
+
+# 2**15 x 8 x 128 bytes = 32 MB, briefly, at start-up; maxmem leaves headroom.
+_SCRYPT_N = 2**15
+_SCRYPT_MEM = 64 * 1024 * 1024
 _FIRST_LOCK = 30
 _MAX_LOCK = 15 * 60
 
@@ -79,12 +83,12 @@ def safe_next(value):
     Only a path: never //host, or a backslash after the slash, which a
     browser reads as another site, and never a scheme.
     """
-    if (
-        not value
-        or not value.startswith("/")
-        or value.startswith(("//", "/\\"))
-        or any(ord(c) < 0x20 for c in value)
-    ):
+    if not value or any(ord(c) < 0x20 for c in value):
+        return "/"
+    # Browsers read a backslash as a slash, so /\\host is //host to them.
+    value = value.replace("\\", "/")
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc or not value.startswith("/"):
         return "/"
     return value
 
@@ -139,8 +143,21 @@ class Auth:
         """Return the signing key, read from disk the first time it is needed."""
         if self._key is None:
             secret = _load_secret(self.secret_path)
+            # scrypt rather than a plain HMAC of the password: someone holding
+            # both .session_secret and a valid cookie could otherwise test
+            # passwords against the cookie at SHA-256 speed. This costs a
+            # fraction of a second once per start, and the key never leaves
+            # memory.
             material = f"{self.user}\0{self.password}".encode()
-            self._key = hmac.new(secret, material, hashlib.sha256).digest()
+            self._key = hashlib.scrypt(
+                material,
+                salt=secret,
+                n=_SCRYPT_N,
+                r=8,
+                p=1,
+                maxmem=_SCRYPT_MEM,
+                dklen=32,
+            )
         return self._key
 
     def _sign(self, body):

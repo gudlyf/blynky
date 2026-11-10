@@ -6,12 +6,16 @@
 // the server applies to ?next=.
 function nextPath() {
   const next = new URLSearchParams(location.search).get("next") || "/";
-  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+  let url;
+  try {
+    url = new URL(next, location.origin);
+  } catch (err) {
     return "/";
   }
+  if (url.origin !== location.origin) return "/";
   // A notification link is /#/event/...: the fragment never reaches the
   // server, but the browser carries it across the redirect to this page.
-  return next + location.hash;
+  return url.pathname + url.search + location.hash;
 }
 
 const form = document.getElementById("auth-form");
