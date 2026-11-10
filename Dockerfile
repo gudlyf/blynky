@@ -100,8 +100,10 @@ COPY --from=version /BUILD /src/blynky/blynky/BUILD
 USER blynky
 EXPOSE 8080
 
+# /healthz answers without a session, so this keeps working with AUTH_USER
+# set, and says nothing about the cameras to whoever asks.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import os,urllib.request; \
-urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['PORT']}/api/state\", timeout=4)"
+urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['PORT']}/healthz\", timeout=4)"
 
 CMD ["python", "run.py"]

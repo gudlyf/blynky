@@ -27,17 +27,23 @@ release branches.
   Host, Origin and content-type checks
 - Ways to read or delete files outside the archive through the API
 - Anything that exposes `.blink_creds.json` or the Blink session token
+- With the login on: any way past it, such as reaching a page, clip or API
+  call without a session, forging a session, or reading
+  `data/.session_secret`
 - Injection through camera names, descriptions or other values that reach the
   page or the filesystem
 - Docker image issues, such as running as root or baking secrets into a layer
 
 ## What is not a vulnerability
 
-- **The UI has no login.** This is by design and
+- **The UI has no login unless one is set.** The login (`AUTH_USER` and
+  `AUTH_PASSWORD`) is optional and off by default, as
   [documented](README.md#security): Blynky binds `127.0.0.1` by default and is
   meant to sit behind something that controls access, such as
-  `tailscale serve`. "Anyone who can reach the port can see the cameras" is
-  expected behaviour, not a finding.
+  `tailscale serve`. With the login off, "anyone who can reach the port can
+  see the cameras" is expected behaviour, not a finding. So is the login's
+  password and cookie being readable over plain HTTP, which the docs warn
+  about.
 - `.blink_creds.json` storing the Blink password in plain text. blinkpy stores
   it that way. Blynky makes the file readable only by its owner (`chmod 600`)
   and excludes it from git and Docker builds.
