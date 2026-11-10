@@ -10,6 +10,26 @@ ROOT = Path(__file__).resolve().parent.parent
 # Values already in the real environment win; .env only fills the gaps.
 load_dotenv(ROOT / ".env")
 
+
+def _number(name, default, kind, noun):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return kind(raw)
+    except ValueError:
+        # One line naming the setting, not a traceback from deep in import.
+        raise SystemExit(f"{name} must be {noun}, not {raw!r}.") from None
+
+
+def _int(name, default):
+    return _number(name, default, int, "a whole number")
+
+
+def _float(name, default):
+    return _number(name, default, float, "a number")
+
+
 CREDFILE = os.environ.get("CREDFILE", str(ROOT / ".blink_creds.json"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(ROOT / "data")))
 EVENT_DIR = DATA_DIR / "events"
@@ -20,18 +40,18 @@ STILL_DIR = DATA_DIR / "stills"
 
 # blinkpy's README warns that calls faster than 60s can overwhelm Blink's
 # servers, so this is floored rather than merely defaulted.
-POLL_SECONDS = max(60, int(os.environ.get("POLL_SECONDS", "60")))
+POLL_SECONDS = max(60, _int("POLL_SECONDS", 60))
 
 HOST = os.environ.get("HOST", "127.0.0.1")
-PORT = int(os.environ.get("PORT", "8080"))
+PORT = _int("PORT", 8080)
 
 # Provider for the vision model: "ollama" (default) or "gemini".
 VISION_PROVIDER = os.environ.get("VISION_PROVIDER", "ollama").lower()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 if VISION_PROVIDER == "gemini" and not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY is required when VISION_PROVIDER is 'gemini'")
+    raise SystemExit("GEMINI_API_KEY is required when VISION_PROVIDER is gemini.")
 
-PROVIDER_PAUSE = float(os.environ.get("PROVIDER_PAUSE", "0"))
+PROVIDER_PAUSE = _float("PROVIDER_PAUSE", 0)
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "minimax-m3:cloud")
@@ -40,41 +60,39 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_URL = os.environ.get(
     "GEMINI_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
 )
-GEMINI_PAUSE = (
-    float(os.environ["GEMINI_PAUSE"]) if "GEMINI_PAUSE" in os.environ else None
-)
+GEMINI_PAUSE = _float("GEMINI_PAUSE", None)
 
 # Active vision model name for reporting in UI and diagnostics.
 VISION_MODEL = GEMINI_MODEL if VISION_PROVIDER == "gemini" else OLLAMA_MODEL
 
-MAX_FRAMES = int(os.environ.get("MAX_FRAMES", "4"))
+MAX_FRAMES = _int("MAX_FRAMES", 4)
 # Reasoning models spend tokens thinking before they answer, so this needs
 # headroom well beyond the length of the description itself.
-MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "1500"))
-VISION_TIMEOUT = int(os.environ.get("VISION_TIMEOUT", "180"))
+MAX_TOKENS = _int("MAX_TOKENS", 1500)
+VISION_TIMEOUT = _int("VISION_TIMEOUT", 180)
 
 # Max retries on transient errors (429 Rate Limit, 503 High Demand).
-VISION_MAX_RETRIES = int(os.environ.get("VISION_MAX_RETRIES", "4"))
-VISION_RETRY_DELAY = float(os.environ.get("VISION_RETRY_DELAY", "5.0"))
+VISION_MAX_RETRIES = _int("VISION_MAX_RETRIES", 4)
+VISION_RETRY_DELAY = _float("VISION_RETRY_DELAY", 5.0)
 
 # Describe events already on the server when the app starts.
 CATCH_UP = os.environ.get("CATCH_UP") == "1"
 
 # How many past events to keep in the in-memory feed. The archive on disk
 # keeps everything regardless; this only bounds what a fresh page load gets.
-HISTORY = int(os.environ.get("HISTORY", "50"))
+HISTORY = _int("HISTORY", 50)
 
 # How many captures one page of the library view asks for at a time.
-PAGE_SIZE = int(os.environ.get("PAGE_SIZE", "60"))
+PAGE_SIZE = _int("PAGE_SIZE", 60)
 
 # How many motion events the timeline lists: the one under the camera grid,
 # and the per-camera one in the detail view.
-TIMELINE = int(os.environ.get("TIMELINE", "25"))
+TIMELINE = _int("TIMELINE", 25)
 
 # How many times a saved clip may be sent to the model before the archive
 # stops offering it. Without a cap, a clip the model can never handle would be
 # retried on every restart for as long as it is kept.
-DESCRIBE_ATTEMPTS = int(os.environ.get("DESCRIBE_ATTEMPTS", "3"))
+DESCRIBE_ATTEMPTS = _int("DESCRIBE_ATTEMPTS", 3)
 
 # Describe saved clips that have no description at start-up. Unlike CATCH_UP
 # this never touches Blink - the media is already on disk.
@@ -83,20 +101,20 @@ BACKFILL = os.environ.get("BACKFILL", "1") != "0"
 # Seconds to wait between clips while working through that backlog. Live
 # motion and the refresh button share the one model, so a long backlog has to
 # leave gaps rather than hold the lock end to end.
-BACKFILL_PAUSE = float(os.environ.get("BACKFILL_PAUSE", "2"))
+BACKFILL_PAUSE = _float("BACKFILL_PAUSE", 2)
 
 # How many recent clips per camera the "Sync now" button pulls. Blink records
 # a burst of clips when something moves, so this is a handful rather than one.
-SYNC_LIMIT = int(os.environ.get("SYNC_LIMIT", "5"))
+SYNC_LIMIT = _int("SYNC_LIMIT", 5)
 
 # How far back that button asks Blink's cloud feed for clips. The sync
 # module's own storage is read whole, so this only bounds the cloud query.
-SYNC_DAYS = int(os.environ.get("SYNC_DAYS", "2"))
+SYNC_DAYS = _int("SYNC_DAYS", 2)
 
 # Delete archived captures older than this many days. 0 keeps everything,
 # which is the default: an existing install must not start deleting footage
 # because it was upgraded. Age is read from the capture's own timestamp.
-RETAIN_DAYS = int(os.environ.get("RETAIN_DAYS", "0"))
+RETAIN_DAYS = _int("RETAIN_DAYS", 0)
 
 # Log what would be deleted and delete nothing. Worth one run before trusting
 # a new RETAIN_DAYS with a month of footage.
@@ -149,16 +167,16 @@ IDENTIFY = os.environ.get("IDENTIFY", "1") != "0"
 # References kept per person. Spread them over several days rather than one
 # event: testing showed the model matches build and posture across a change of
 # clothes, but only when it has seen more than one day's worth.
-MAX_REFERENCES = int(os.environ.get("MAX_REFERENCES", "5"))
+MAX_REFERENCES = _int("MAX_REFERENCES", 5)
 
 # Total reference images sent in one identification. Every one costs prompt
 # space on every person event, so the gallery is capped and filled round-robin
 # rather than letting one well-photographed person crowd out the rest.
-IDENTIFY_MAX_IMAGES = int(os.environ.get("IDENTIFY_MAX_IMAGES", "12"))
+IDENTIFY_MAX_IMAGES = _int("IDENTIFY_MAX_IMAGES", 12)
 
 # A gallery plus the clip's frames is a much bigger request than a plain
 # description, so it gets its own, longer, ceiling.
-IDENTIFY_TIMEOUT = int(os.environ.get("IDENTIFY_TIMEOUT", "240"))
+IDENTIFY_TIMEOUT = _int("IDENTIFY_TIMEOUT", 240)
 
 # The least confidence that counts as a match. Deliberately strict, because
 # the two mistakes do not cost the same: failing to recognise someone just
@@ -201,7 +219,7 @@ NTFY_URL = os.environ.get("NTFY_URL", "").strip()
 # the topic sees it.
 BLYNKY_URL = os.environ.get("BLYNKY_URL", "").strip().rstrip("/")
 if BLYNKY_URL and not BLYNKY_URL.startswith(("http://", "https://")):
-    raise ValueError("BLYNKY_URL must start with http:// or https://")
+    raise SystemExit("BLYNKY_URL must start with http:// or https://.")
 
 # Names, beside BLYNKY_URL's, that this server answers to, comma separated:
 # nas.local, blynky.home.lan. An IP address and localhost always work. Any
@@ -229,7 +247,7 @@ AUTH_ENABLED = bool(AUTH_USER and AUTH_PASSWORD)
 # How long one sign-in lasts, in days. Long on purpose: a phone signs in once.
 # Each use in the second half of that time starts it over, so a device used
 # now and then never has to sign in again.
-AUTH_SESSION_DAYS = max(1, int(os.environ.get("AUTH_SESSION_DAYS", "365")))
+AUTH_SESSION_DAYS = max(1, _int("AUTH_SESSION_DAYS", 365))
 
 # The key sessions are signed with, made on first use. Deleting it signs out
 # every device; so does changing AUTH_USER or AUTH_PASSWORD.
@@ -255,19 +273,19 @@ NTFY_SUBJECTS = tuple(
 )
 
 # ntfy's own scale: 1 min, 3 default, 5 max.
-NTFY_PRIORITY = int(os.environ.get("NTFY_PRIORITY", "4"))
-NTFY_TIMEOUT = int(os.environ.get("NTFY_TIMEOUT", "15"))
+NTFY_PRIORITY = _int("NTFY_PRIORITY", 4)
+NTFY_TIMEOUT = _int("NTFY_TIMEOUT", 15)
 
 # Priority for someone the model recognised. The default keeps them but drops
 # them below a stranger, which is the whole point of enrolling anyone.
-NTFY_KNOWN_PRIORITY = int(os.environ.get("NTFY_KNOWN_PRIORITY", "2"))
+NTFY_KNOWN_PRIORITY = _int("NTFY_KNOWN_PRIORITY", 2)
 
 # Say nothing at all when everyone seen is a known face.
 NTFY_SKIP_KNOWN = os.environ.get("NTFY_SKIP_KNOWN") == "1"
 
 # Seconds one camera must wait before it may notify again. A camera stuck
 # facing a swaying branch would otherwise spend the daily quota by morning.
-NTFY_COOLDOWN = int(os.environ.get("NTFY_COOLDOWN", "120"))
+NTFY_COOLDOWN = _int("NTFY_COOLDOWN", 120)
 
 # Where a pause set from the settings menu is kept, so a restart does not
 # quietly turn notifications back on before the time someone asked for.
@@ -307,20 +325,20 @@ DAILY_SCOPES = [
 # be a notification for every day in the archive.
 NTFY_DAILY = os.environ.get("NTFY_DAILY") == "1"
 # Low by default: it lands in the small hours, and is reading, not an alert.
-NTFY_DAILY_PRIORITY = int(os.environ.get("NTFY_DAILY_PRIORITY", "2"))
+NTFY_DAILY_PRIORITY = _int("NTFY_DAILY_PRIORITY", 2)
 
 # Hour of the day, local time, after which yesterday is summarized. An hour's
 # grace lets the last clips before midnight finish being described first.
-DAILY_HOUR = int(os.environ.get("DAILY_HOUR", "1"))
+DAILY_HOUR = _int("DAILY_HOUR", 1)
 
 # The most clip descriptions one summary is written from. A camera facing a
 # road can log hundreds a day, and past a point more lines add tokens, not
 # insight; a day over the limit is sampled evenly across its hours.
-DAILY_MAX_CLIPS = int(os.environ.get("DAILY_MAX_CLIPS", "300"))
+DAILY_MAX_CLIPS = _int("DAILY_MAX_CLIPS", 300)
 
 # Seconds between days while a backfill works through them, for the same
 # reason as BACKFILL_PAUSE: live motion shares the model.
-DAILY_PAUSE = float(os.environ.get("DAILY_PAUSE", "2"))
+DAILY_PAUSE = _float("DAILY_PAUSE", 2)
 
 # A digest, not a log: the clips themselves are a click away in the library,
 # so this should read as the gist of the day rather than a list of times.

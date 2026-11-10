@@ -8,6 +8,7 @@ import os
 import tempfile
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from blinkpy import api
@@ -29,6 +30,35 @@ from . import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Messages one browser may fall behind by before it is dropped. A page that is
+# reading never comes near this; one in a suspended tab soon would.
+_QUEUE_LIMIT = 256
+
+
+def _read_all(paths):
+    return [path.read_bytes() for path in paths]
+
+
+def _first_existing(base, names):
+    for name in names:
+        path = base / name
+        if path.exists():
+            return path
+    return None
+
+
+def _bytes_of(base, prefix):
+    return sum(
+        path.stat().st_size for path in base.glob(f"{prefix}*") if path.is_file()
+    )
+
+
+def _private_empty_file(path):
+    """Create path empty and readable by its owner alone, replacing any left over."""
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()
+    os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
 
 
 def _now():
@@ -138,7 +168,7 @@ class Monitor:
 
     def subscribe(self):
         """Register a queue that receives broadcast messages."""
-        queue = asyncio.Queue()
+        queue = asyncio.Queue(maxsize=_QUEUE_LIMIT)
         self._listeners.add(queue)
         return queue
 
@@ -148,9 +178,15 @@ class Monitor:
 
     def _broadcast(self, message):
         for queue in list(self._listeners):
-            # Never let a slow client stall the poll loop.
-            with contextlib.suppress(asyncio.QueueFull):
+            # Never let a slow client stall the poll loop, or grow without
+            # bound: a browser that has stopped reading is dropped, and its
+            # socket closes on the heartbeat. A live one reconnects and gets a
+            # fresh snapshot, which is everything the dropped messages said.
+            try:
                 queue.put_nowait(message)
+            except asyncio.QueueFull:
+                _LOGGER.warning("dropping a browser that stopped reading")
+                self._listeners.discard(queue)
 
     # -- state ------------------------------------------------------------
 
@@ -242,6 +278,15 @@ class Monitor:
         async with self._login_lock:
             if self.status == "watching":
                 return {"status": "connected"}
+            # Only when the sign-in form is what the page is showing. "error"
+            # is a poll that failed on a session that is otherwise good, and
+            # the loop is still running on it: a sign-in now would swap the
+            # account under it and overwrite the saved credentials.
+            if self.status not in ("needs-credentials", "awaiting-2fa"):
+                return {
+                    "status": "error",
+                    "message": "Already signed in to Blink; nothing to do.",
+                }
 
             self._new_blink({"username": username, "password": password})
             try:
@@ -373,9 +418,20 @@ class Monitor:
             self._seen.setdefault(record["camera"], record["stamp"])
 
     async def _save_creds(self):
-        await self.blink.save(config.CREDFILE)
-        # login_attributes includes the plaintext password, so lock it down.
-        os.chmod(config.CREDFILE, 0o600)
+        # login_attributes includes the plaintext password, so the file is
+        # created 0600 before blinkpy writes a byte of it, and renamed into
+        # place whole: rewritten every poll, a crash mid-write would otherwise
+        # cost the token and the password at once.
+        target = Path(config.CREDFILE)
+        spare = target.with_name(f".{target.name}.tmp")
+        await asyncio.to_thread(_private_empty_file, spare)
+        try:
+            await self.blink.save(str(spare))
+            await asyncio.to_thread(os.replace, spare, target)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                spare.unlink()
+            raise
 
     # -- polling ----------------------------------------------------------
 
@@ -906,8 +962,8 @@ class Monitor:
             await media.write_bytes(clip_path, clip)
             event["clip"] = f"/media/events/{slug}/{prefix}.mp4"
             with tempfile.TemporaryDirectory() as workdir:
-                for frame in await media.extract_frames(clip_path, workdir):
-                    frames.append(frame.read_bytes())
+                extracted = await media.extract_frames(clip_path, workdir)
+                frames.extend(await asyncio.to_thread(_read_all, extracted))
 
         if frames:
             # The snapshot above is Blink's stored thumbnail, which can be
@@ -924,9 +980,7 @@ class Monitor:
 
         # Made from whichever still won above, so the library's copy matches.
         await library.ensure_thumb(event)
-        event["bytes"] = sum(
-            path.stat().st_size for path in base.glob(f"{prefix}*") if path.is_file()
-        )
+        event["bytes"] = await asyncio.to_thread(_bytes_of, base, prefix)
         # Write the sidecar before announcing the event: a crash between the
         # two must not leave media on disk that nothing can find again.
         await library.write_sidecar(event)
@@ -1381,18 +1435,17 @@ class Monitor:
 
         images = []
         clip_path = base / f"{prefix}.mp4"
-        if clip_path.exists():
+        if await asyncio.to_thread(clip_path.exists):
             with tempfile.TemporaryDirectory() as workdir:
-                for frame in await media.extract_frames(clip_path, workdir):
-                    images.append(frame.read_bytes())
+                extracted = await media.extract_frames(clip_path, workdir)
+                images.extend(await asyncio.to_thread(_read_all, extracted))
         if not images:
             # No clip, or ffmpeg made nothing of it: the saved still is all
             # there is, and it is what the live path falls back to as well.
-            for name in (f"{prefix}-frame.jpg", f"{prefix}.jpg"):
-                still = base / name
-                if still.exists():
-                    images.append(still.read_bytes())
-                    break
+            names = (f"{prefix}-frame.jpg", f"{prefix}.jpg")
+            still = await asyncio.to_thread(_first_existing, base, names)
+            if still is not None:
+                images.append(await asyncio.to_thread(still.read_bytes))
         if not images:
             _LOGGER.warning("nothing to describe for %s", record["id"])
             return False
@@ -1492,11 +1545,11 @@ class Monitor:
         an empty yard rather than of the person being enrolled.
         """
         base = library.dir_for(record["kind"], record["slug"])
-        for name in (f"{record['prefix']}-frame.jpg", f"{record['prefix']}.jpg"):
-            path = base / name
-            if path.exists():
-                return await asyncio.to_thread(path.read_bytes)
-        return None
+        names = (f"{record['prefix']}-frame.jpg", f"{record['prefix']}.jpg")
+        path = await asyncio.to_thread(_first_existing, base, names)
+        if path is None:
+            return None
+        return await asyncio.to_thread(path.read_bytes)
 
     async def _identify(self, event, images):
         """Guess which known people are in these frames, if any."""

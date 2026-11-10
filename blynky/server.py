@@ -121,15 +121,37 @@ async def diagnostics(request):
     )
 
 
-async def login(request):
-    """Accept credentials from the browser and attempt a sign-in."""
+async def _json_object(request):
+    """Return the request body as a dict, or answer 400.
+
+    Every handler reads fields off it with .get(), which a list, a string or
+    null in the body would turn into a 500.
+    """
     try:
         body = await request.json()
     except ValueError:
         raise web.HTTPBadRequest(reason="expected JSON") from None
+    if not isinstance(body, dict):
+        raise web.HTTPBadRequest(reason="expected a JSON object")
+    return body
 
-    username = (body.get("username") or "").strip()
-    password = body.get("password") or ""
+
+def _text(body, key):
+    """Return a string field, "" when missing, or answer 400 for anything else."""
+    value = body.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise web.HTTPBadRequest(reason=f"{key} must be a string")
+    return value
+
+
+async def login(request):
+    """Accept credentials from the browser and attempt a sign-in."""
+    body = await _json_object(request)
+
+    username = _text(body, "username").strip()
+    password = _text(body, "password")
     if not username or not password:
         return web.json_response(
             {"status": "error", "message": "Username and password are required."}
@@ -141,12 +163,9 @@ async def login(request):
 
 async def submit_2fa(request):
     """Accept a 2FA code from the browser."""
-    try:
-        body = await request.json()
-    except ValueError:
-        raise web.HTTPBadRequest(reason="expected JSON") from None
+    body = await _json_object(request)
 
-    code = (body.get("code") or "").strip()
+    code = _text(body, "code").strip()
     if not code:
         return web.json_response(
             {"status": "error", "message": "Enter the code Blink sent you."}
@@ -158,10 +177,7 @@ async def submit_2fa(request):
 
 async def snap(request):
     """Ask one camera for a new still, on request from the browser."""
-    try:
-        body = await request.json()
-    except ValueError:
-        raise web.HTTPBadRequest(reason="expected JSON") from None
+    body = await _json_object(request)
 
     # Not stripped: Blink keeps whitespace in a camera's name, and the name is
     # the key it is looked up by.
@@ -225,11 +241,8 @@ async def star_event(request):
     record = monitor.library.find(request.match_info["event_id"])
     if record is None:
         raise web.HTTPNotFound(reason="unknown capture")
-    try:
-        body = await request.json()
-    except ValueError:
-        raise web.HTTPBadRequest(reason="expected JSON") from None
-    if not isinstance(body, dict) or not isinstance(body.get("starred"), bool):
+    body = await _json_object(request)
+    if not isinstance(body.get("starred"), bool):
         raise web.HTTPBadRequest(reason="starred must be true or false")
     return web.json_response(await monitor.set_starred(record, body["starred"]))
 
@@ -252,13 +265,10 @@ async def enroll(request):
     produced, at the angle and resolution they produce it at.
     """
     monitor = request.app["monitor"]
-    try:
-        body = await request.json()
-    except ValueError:
-        raise web.HTTPBadRequest(reason="expected JSON") from None
+    body = await _json_object(request)
 
-    name = (body.get("name") or "").strip()
-    event_id = (body.get("event") or "").strip()
+    name = _text(body, "name").strip()
+    event_id = _text(body, "event").strip()
     if not name:
         return web.json_response({"status": "error", "message": "Name required."})
 
@@ -350,12 +360,7 @@ async def daily_summaries(request):
     """
     monitor = request.app["monitor"]
     if request.method == "POST":
-        try:
-            body = await request.json()
-        except ValueError:
-            raise web.HTTPBadRequest(reason="expected JSON") from None
-        if not isinstance(body, dict):
-            raise web.HTTPBadRequest(reason="expected a JSON object")
+        body = await _json_object(request)
         changes = {key: body[key] for key in ("enabled", "notify") if key in body}
         if not all(isinstance(v, bool) for v in changes.values()):
             raise web.HTTPBadRequest(reason="enabled and notify must be true or false")
@@ -464,12 +469,7 @@ async def ntfy(request):
     """
     monitor = request.app["monitor"]
     if request.method == "POST":
-        try:
-            body = await request.json()
-        except ValueError:
-            raise web.HTTPBadRequest(reason="expected JSON") from None
-        if not isinstance(body, dict):
-            raise web.HTTPBadRequest(reason="expected a JSON object")
+        body = await _json_object(request)
         if body.get("paused"):
             hours = body.get("hours")
             if hours is not None:

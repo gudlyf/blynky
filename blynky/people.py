@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from slugify import slugify
 
 from . import config
+from .files import write_atomic
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -250,6 +251,5 @@ class People:
         await asyncio.to_thread(self._write_manifest, slug, payload)
 
     def _write_manifest(self, slug, payload):
-        path = dir_for(slug)
-        path.mkdir(parents=True, exist_ok=True)
-        (path / _MANIFEST).write_text(payload, encoding="utf-8")
+        # Aside and renamed: a half-written manifest would forget the person.
+        write_atomic(dir_for(slug) / _MANIFEST, payload)
