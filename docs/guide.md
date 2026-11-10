@@ -596,6 +596,22 @@ Never put ntfy behind `tailscale funnel` unless you also give it users and
 passwords (`NTFY_AUTH_FILE`, `NTFY_AUTH_DEFAULT_ACCESS=deny-all`): with neither,
 anyone who finds it can read the topics.
 
+**A server that requires sign-in.** Once ntfy has users, give Blynky an access
+token rather than a password. Users need `NTFY_AUTH_FILE` set on the ntfy
+server. Then create a user that may only write to the topic, and a token for
+it — for the compose server, prefix each with `docker compose exec ntfy`:
+
+```bash
+ntfy user add blynky
+ntfy access blynky your-topic write-only
+ntfy token add blynky
+```
+
+and put the token in `.env` as `NTFY_TOKEN=tk_...`. Blynky sends it as a
+Bearer token with every notification. A `user:password@` in `NTFY_URL` also
+works, but it is then part of an address that can end up in logs and
+settings.
+
 ## Known people
 
 Open a capture in the library, and if it has a person in it the viewer asks
@@ -842,8 +858,17 @@ day's summary outlives the clips it was written from.
 ## Docker in depth
 
 The image carries `ffmpeg`, runs as an unprivileged user, and has a
-healthcheck on `/api/state`, so `docker compose ps` distinguishes "listening"
-from "wedged".
+healthcheck on `/healthz`, so `docker compose ps` distinguishes "listening"
+from "wedged". `/healthz` answers without a session and says nothing else,
+so it keeps working with [the login](#signing-in) on.
+
+It is built from exactly what `uv.lock` lists, on base images pinned by
+digest, so rebuilding a release gives the same packages it shipped with.
+`docker-compose.yml` then runs both services with a read-only root
+filesystem, no Linux capabilities and `no-new-privileges`: Blynky writes only
+to `/data` and `/tmp`, ntfy only to its cache. A setup that needs more, such
+as a script of your own writing elsewhere in the container, can drop those
+lines in a `docker-compose.override.yml`.
 
 ### The published image
 

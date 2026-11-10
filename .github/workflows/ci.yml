@@ -1,0 +1,47 @@
+# Lint and tests for every pull request and every push to main: ruff, then
+# pytest against a temporary data folder. Nothing here talks to Blink or a
+# model; tests/ covers the HTTP layer and the storage around it.
+#
+# blinkpy comes from the same pinned commit the Dockerfile builds with,
+# checked out beside this repo where pyproject.toml expects it.
+#
+# Actions are pinned by commit, with the release beside it, like docker.yml.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch blinkpy at the Dockerfile's pin
+        run: |
+          ref="$(sed -n 's/^ARG BLINKPY_REF=//p' Dockerfile)"
+          repo="$(sed -n 's/^ARG BLINKPY_REPO=//p' Dockerfile)"
+          git init -q ../blinkpy
+          git -C ../blinkpy remote add origin "$repo"
+          git -C ../blinkpy fetch -q --depth 1 origin "$ref"
+          git -C ../blinkpy checkout -q FETCH_HEAD
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      # --frozen: the lock file is what gets tested, and a pyproject.toml
+      # change without a matching uv.lock fails here rather than in the image.
+      - run: uv sync --frozen
+
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest

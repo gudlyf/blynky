@@ -12,7 +12,9 @@
 # Settings come from the environment (-e / --env-file); .env and the cached
 # credentials are deliberately kept out of the image.
 
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
+# Base images are pinned by digest as well as tag, so a tag moved upstream
+# cannot change what a release is built on; Dependabot proposes new digests.
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca AS base
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -56,18 +58,20 @@ WORKDIR /src/blynky
 # uv resolves blinkpy from ../blinkpy, which is why the clone above lands at
 # /src/blinkpy: it makes the path in pyproject.toml true inside the image too.
 # Dependencies are keyed on the manifests alone, so editing app code does not
-# invalidate the install. uv.lock is gitignored, hence the optional glob.
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --no-dev --no-install-project
+# invalidate the install. --frozen installs exactly what uv.lock says, so a
+# release image is the same set of packages however long after the tag it is
+# rebuilt, and a change to them is a reviewed change to that file.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY run.py ./
 COPY blynky ./blynky
 # Maintenance scripts, run with `docker compose run` against the same /data.
 COPY scripts ./scripts
-RUN uv sync --no-dev
+RUN uv sync --frozen --no-dev
 
 
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
 
 # ffmpeg samples frames out of each clip; without it the app silently falls
 # back to the single snapshot, which is a much worse description.

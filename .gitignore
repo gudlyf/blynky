@@ -5,7 +5,6 @@ data/
 __pycache__/
 *.pyc
 .ruff_cache/
-uv.lock
 logs/
 blynky/BUILD
 ntfy/

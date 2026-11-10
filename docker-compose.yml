@@ -62,6 +62,17 @@ services:
     volumes:
       - ./data:/data
 
+    # Nothing in the image needs to change at runtime: everything Blynky
+    # writes goes to /data, and ffmpeg's frames to /tmp. So the root
+    # filesystem is read-only, no Linux capabilities are kept (it runs as an
+    # unprivileged user and binds 8080), and nothing in it can gain more.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
   # Optional: a private ntfy server for the notifications, so the snapshots
   # and descriptions never sit on ntfy.sh. Off unless asked for:
   #
@@ -76,7 +87,9 @@ services:
   # network, with NTFY_URL=http://ntfy/<topic>. See "Running your own ntfy
   # server" in docs/guide.md.
   ntfy:
-    image: binwiederhier/ntfy:v2.33.1
+    # Pinned by digest too, so the tag cannot be moved under it; Dependabot
+    # proposes updates.
+    image: binwiederhier/ntfy:v2.33.1@sha256:29bc952294d58957f6ca6638eca9a653a33555989224edbdf4bb9433ee606497
     profiles: [ntfy]
     command: serve
     restart: unless-stopped
@@ -100,3 +113,9 @@ services:
     # and 3 hours by default), so this stays small.
     volumes:
       - ./ntfy:/var/cache/ntfy
+    # As for Blynky: ntfy writes only to its cache, and binds port 80 inside
+    # the container, which Docker allows without NET_BIND_SERVICE.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true

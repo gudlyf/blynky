@@ -215,6 +215,7 @@ async def send_daily(session, camera, slug, day, summary, system=None):
         return False
     when = datetime.fromisoformat(day)
     headers = {
+        **_auth(),
         "Title": _header(f"{camera} - {when:%A, %B} {when.day}"),
         "Tags": "calendar",
         "Priority": str(config.NTFY_DAILY_PRIORITY),
@@ -240,6 +241,13 @@ async def send_daily(session, camera, slug, day, summary, system=None):
         return False
     _LOGGER.info("ntfy: daily summary for %s on %s", camera, day)
     return True
+
+
+def _auth():
+    """Return the Authorization header NTFY_TOKEN asks for, if any."""
+    if not config.NTFY_TOKEN:
+        return {}
+    return {"Authorization": f"Bearer {config.NTFY_TOKEN}"}
 
 
 def should_send(event):
@@ -285,6 +293,7 @@ async def send(session, event, image=None, system=None):
     # is a note. Anyone unrecognised keeps the louder priority, which includes
     # the case where identification was never asked for.
     headers = {
+        **_auth(),
         "Title": _header(event["camera"]),
         "Tags": _all_tags(event, subjects, known),
         "Priority": str(config.NTFY_KNOWN_PRIORITY if known else config.NTFY_PRIORITY),
