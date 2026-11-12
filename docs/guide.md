@@ -556,7 +556,7 @@ Two things to settle before setting it:
 
 ### Running your own ntfy server
 
-`docker-compose.yml` has an optional ntfy server beside Blynky, for a tailnet.
+`compose.yaml` has an optional ntfy server beside Blynky, for a tailnet.
 The descriptions and snapshots then stay on your machine instead of ntfy.sh,
 and only devices on the tailnet can read a topic.
 
@@ -888,16 +888,16 @@ so it keeps working with [the login](#signing-in) on.
 
 It is built from exactly what `uv.lock` lists, on base images pinned by
 digest, so rebuilding a release gives the same packages it shipped with.
-`docker-compose.yml` then runs both services with a read-only root
+`compose.yaml` then runs both services with a read-only root
 filesystem, no Linux capabilities and `no-new-privileges`: Blynky writes only
 to `/data` and `/tmp`, ntfy only to its cache. A setup that needs more, such
 as a script of your own writing elsewhere in the container, can drop those
-lines in a `docker-compose.override.yml`.
+lines in a `compose.override.yaml`.
 
 ### The published image
 
 Every release tag is built for amd64 and arm64 and published as
-`ghcr.io/gudlyf/blynky`, which is what `docker-compose.yml` pulls. Its tags:
+`ghcr.io/gudlyf/blynky`, which is what `compose.yaml` pulls. Its tags:
 
 | Tag | Is |
 | --- | --- |
@@ -993,7 +993,7 @@ cp .blink_creds.json data/
 
 ### Configuration under compose
 
-`.env` is read as usual, but four variables are pinned in `docker-compose.yml`
+`.env` is read as usual, but four variables are pinned in `compose.yaml`
 and win over it, because in a container the file's values are wrong:
 
 | Pinned | Why |
@@ -1022,7 +1022,7 @@ setting `BIND_ADDR` — a deliberate edit, not a side effect of containerising.
 Two things have to be true, and only one of them is about DNS.
 
 **The name has to resolve.** Docker Desktop and OrbStack both define
-`host.docker.internal`; Docker Engine on Linux does not. `docker-compose.yml`
+`host.docker.internal`; Docker Engine on Linux does not. `compose.yaml`
 pins it to `host-gateway`, which is a no-op where the name already works and
 makes the file portable to Linux.
 

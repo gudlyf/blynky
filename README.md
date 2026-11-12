@@ -116,7 +116,7 @@ Keep these in mind too:
 
 Every setting is an environment variable, and all of them are optional. Put them in `.env` (start from [`.env.example`](.env.example)) or set them in the shell. A value already set in the environment beats the one in `.env`.
 
-**Under Docker,** `docker-compose.yml` fixes `HOST`, `PORT`, `DATA_DIR` and `CREDFILE`. To choose which host address the port is published on, use `BIND_ADDR` and `HOST_PORT` (default `127.0.0.1:8080`) instead. `BLYNKY_TAG` picks which published image it pulls, `latest` by default; see [The published image](docs/guide.md#the-published-image) for the tags and how to upgrade.
+**Under Docker,** `compose.yaml` fixes `HOST`, `PORT`, `DATA_DIR` and `CREDFILE`. To choose which host address the port is published on, use `BIND_ADDR` and `HOST_PORT` (default `127.0.0.1:8080`) instead. `BLYNKY_TAG` picks which published image it pulls, `latest` by default; see [The published image](docs/guide.md#the-published-image) for the tags and how to upgrade.
 
 <details open>
 <summary><strong>Core</strong></summary>
@@ -178,7 +178,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NTFY_URL` | unset | ntfy topic URL. Nothing is sent while this is empty |
-| `NTFY_PUBLIC_URL` | unset | Only for the optional ntfy server in `docker-compose.yml` (`--profile ntfy`): where your phone reaches it. See [Running your own ntfy server](docs/guide.md#running-your-own-ntfy-server) |
+| `NTFY_PUBLIC_URL` | unset | Only for the optional ntfy server in `compose.yaml` (`--profile ntfy`): where your phone reaches it. See [Running your own ntfy server](docs/guide.md#running-your-own-ntfy-server) |
 | `NTFY_SYSTEM_TOPICS` | as `SYSTEM_PREFIX` | `1` sends each Blink system's notifications to its own topic, `<system>-<topic>` beside `NTFY_URL`'s. See the [guide](docs/guide.md#notifications) |
 | `NTFY_SUBJECTS` | `person` | Subjects that trigger an alert: `person`, `animal`, `vehicle`, `package` |
 | `NTFY_PRIORITY` | `4` | ntfy priority, from 1 (min) to 5 (max) |
