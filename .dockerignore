@@ -16,6 +16,6 @@ data
 
 Dockerfile
 .dockerignore
-docker-compose.yml
+compose.yaml
 README.md
 ntfy
