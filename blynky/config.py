@@ -1,6 +1,7 @@
 """Runtime configuration, all overridable by environment variable."""
 
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,6 +10,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Values already in the real environment win; .env only fills the gaps.
 load_dotenv(ROOT / ".env")
+
+# If TZ is set (in .env or environment), configure the process time zone.
+if "TZ" in os.environ and hasattr(time, "tzset"):
+    time.tzset()
 
 
 def _number(name, default, kind, noun):
