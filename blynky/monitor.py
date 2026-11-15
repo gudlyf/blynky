@@ -511,6 +511,11 @@ class Monitor:
 
     async def _sync_snapshots(self, initial=False):
         """Write each camera's current thumbnail and tell the UI about it."""
+        # Where each system is, from the homescreen just read. One that came
+        # back empty says nothing, so the zones already known stand.
+        systems = self._system_zones()
+        if systems and self.daily.set_zones(systems) and not initial:
+            self._broadcast_daily()
         for name, camera in self._blink_cameras().items():
             system = self._system_of_sync(camera.sync)
             slug = slugify(name)
@@ -680,6 +685,17 @@ class Monitor:
                     system = systems.get(str(device.get("network_id")))
                     current[str(device["id"])] = self._label(system, device["name"])
         return current
+
+    def _system_zones(self):
+        """Map each system's name to the zone Blink says it is in."""
+        home = self.blink.homescreen or {}
+        systems = self._current_systems()
+        return {
+            systems.get(str(network.get("id"))) or network.get("name"): network.get(
+                "time_zone"
+            )
+            for network in home.get("networks") or []
+        }
 
     def _current_systems(self):
         """Map each system's network id to the name Blink gives it right now."""
@@ -1329,18 +1345,18 @@ class Monitor:
     def _daily_tick(self):
         """Summarize yesterday for every camera, once, when the time comes.
 
-        The time comes separately in each zone LOCATION_TZ names: DAILY_HOUR
-        is the hour where the cameras are.
+        The time comes separately in each location's zone: DAILY_HOUR is the
+        hour where the cameras are.
         """
         if not self.daily.enabled:
             return
         if self._daily_auto is not None and not self._daily_auto.done():
             return
         # Until the cameras are known, nobody knows which zone each is in.
-        if config.LOCATION_TZ and not self._camera_locations():
+        if not self.daily.zones_known:
             return
         due = {}
-        for name in {None, *config.LOCATION_TZ.values()}:
+        for name in {None, *self.daily.zone_names()}:
             where = daily.zone(name)
             if datetime.now().astimezone(where).hour < config.DAILY_HOUR:
                 continue

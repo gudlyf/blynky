@@ -59,6 +59,14 @@ def zone(name):
     return ZoneInfo(name) if name else None
 
 
+def zone_or_none(name):
+    """Return a zone by name, or None if there is no such zone."""
+    try:
+        return zone(name)
+    except (KeyError, ValueError, OSError):
+        return None
+
+
 def _local(stamp, where=None):
     """Return a capture's time in a zone, the server's by default, or None."""
     parsed = library.parse_stamp(stamp)
@@ -145,7 +153,13 @@ class Daily:
         self.notify = config.NTFY_DAILY
         # Which kinds of summary are written, from SCOPES.
         self.scopes = list(config.DAILY_SCOPES)
-        # LOCATION_TZ names already warned about, so the log says it once.
+        # {location key's slug: zone} for each location whose days are not
+        # the server's, from Blink and LOCATION_TZ; see set_zones().
+        self._zones = {}
+        # Whether set_zones() has run: until then nobody knows where any
+        # camera is, so nothing is pending.
+        self.zones_known = False
+        # Names already warned about, so the log says each once.
         self._warned = set()
 
     # -- persistence ------------------------------------------------------
@@ -251,13 +265,54 @@ class Daily:
             )
         return list(found.values())
 
+    def set_zones(self, systems):
+        """Take each location's zone from Blink: {system name: IANA zone}.
+
+        Returns whether anything changed. LOCATION_TZ overrides Blink's. A
+        zone that keeps the server's clock is left out, being the default
+        already: those locations' days are exactly as before, and their
+        summaries stay current.
+        """
+        found = {}
+        for name, where in systems.items():
+            if not name or not where:
+                continue
+            if zone_or_none(where) is None:
+                self._warn_once(
+                    where, "Blink says %r is in %r, which is no zone", name, where
+                )
+                continue
+            found[slugify(name)] = where
+        found.update(config.LOCATION_TZ)
+        default = config.TIME_ZONE
+        zones = {
+            key: where
+            for key, where in found.items()
+            if where != default
+            and not (default is None and config.keeps_local_clock(where))
+        }
+        changed = zones != self._zones or not self.zones_known
+        self._zones = zones
+        self.zones_known = True
+        known = {slugify(name) for name in systems if name}
+        for name in config.LOCATION_TZ.keys() - known:
+            self._warn_once(
+                name, "LOCATION_TZ: no Blink system is called %r; ignored", name
+            )
+        return changed
+
+    def _warn_once(self, key, message, *args):
+        if key not in self._warned:
+            self._warned.add(key)
+            _LOGGER.warning(message, *args)
+
     def zone_name(self, key, locations=None):
         """Name the zone a summary's days run in, or None for the default.
 
-        A camera's and a location's days are the location's, if LOCATION_TZ
-        names one; every camera together keeps the server's.
+        A camera's and a location's days are the location's, where that is
+        not the server's zone; every camera together keeps the server's.
         """
-        if not config.LOCATION_TZ:
+        if not self._zones:
             return None
         kind = kind_of(key)
         if kind == "all":
@@ -269,33 +324,24 @@ class Daily:
             if not held:
                 return None
             key = held[0]
-        # A location's key is its name slugified, as LOCATION_TZ's are.
-        return config.LOCATION_TZ.get(key[len(_LOCATION) :])
+        # A location's key is its name slugified, as the zones' keys are.
+        return self._zones.get(key[len(_LOCATION) :])
+
+    def zone_names(self):
+        """Every zone some location's days run in, besides the server's."""
+        return set(self._zones.values())
 
     def zones(self):
         """Map each camera slug whose days are not the server's to its zone."""
-        if not config.LOCATION_TZ:
+        if not self._zones:
             return {}
         locations = self._locations()
-        self._warn_unmatched(locations)
         found = {}
         for slug in locations:
             name = self.zone_name(slug, locations)
             if name:
                 found[slug] = name
         return found
-
-    def _warn_unmatched(self, locations):
-        """Say once which LOCATION_TZ names match no location Blink reports."""
-        if not locations:
-            return
-        known = {key[len(_LOCATION) :] for key, _ in locations.values()}
-        for name in config.LOCATION_TZ.keys() - known - self._warned:
-            self._warned.add(name)
-            _LOGGER.warning(
-                "LOCATION_TZ: no Blink system is called %r; its cameras keep TZ",
-                name,
-            )
 
     def today_for(self, key, locations=None):
         """Return today's date where a summary's days run, as YYYY-MM-DD."""
@@ -398,12 +444,12 @@ class Daily:
 
         Oldest first, as (slug, day, records), for the same reason the
         description backlog drains that way. Today is never one: it is not
-        over yet. Nor is anything while LOCATION_TZ is set and the cameras are
-        not known yet: which day a clip falls on depends on where it is.
+        over yet. Nor is anything before Blink has said where each location
+        is: which day a clip falls on depends on that.
         """
-        locations = self._locations()
-        if config.LOCATION_TZ and not locations:
+        if not self.zones_known:
             return []
+        locations = self._locations()
         current = {}
         found = []
         for (slug, day), records in self._group(all_records).items():

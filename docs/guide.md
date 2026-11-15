@@ -348,16 +348,10 @@ Set `TZ` to the cameras' zone if the server is somewhere else.
 
 ### Cameras in more than one time zone
 
-If some of your Blink systems are somewhere else, list them in `LOCATION_TZ`
-by their system names, as Blynky shows them beside each camera (and the Blink
-app lists them):
-
-```bash
-TZ=America/New_York
-LOCATION_TZ=The Cabin=America/Denver
-```
-
-Then everything about the cabin's cameras follows Denver:
+Each Blink system has a time zone, set in the Blink app, and Blynky uses it.
+A system somewhere other than `TZ` has its cameras' days, and their times,
+in its own zone, with nothing to configure. With `TZ=America/New_York` and a
+cabin system the Blink app puts in Denver:
 
 - **Summaries.** Each camera's day, and the cabin's location summary, runs
   midnight to midnight in Denver. The model is shown Denver times, so evening
@@ -369,16 +363,25 @@ Then everything about the cabin's cameras follows Denver:
 - **The library.** Narrowed to one of the cabin's cameras, the day headings
   are Denver days, under that camera's summary and the cabin's.
 
-The summary of all cameras together still runs on `TZ`'s days, and so does
-the library when it shows every camera. That is why a location in another
-zone has its summary shown only when the library is narrowed to one of its
-cameras. A camera Blink no longer reports has no location, so its old clips
-follow `TZ`. A name that matches no system is logged as a warning once the
-cameras are known.
+A system in the same zone as `TZ` is unaffected. The summary of all cameras
+together still runs on `TZ`'s days, and so does the library when it shows
+every camera. That is why a location in another zone has its summary shown
+only when the library is narrowed to one of its cameras. A camera Blink no
+longer reports has no location, so its old clips follow `TZ`.
 
-Summaries written before you set `LOCATION_TZ` covered the old days. They
-stay, marked out of date, so each has an **Update** button to write it again
-on the new days.
+If the Blink app has a system's zone wrong, override it with `LOCATION_TZ`,
+by the system's name as Blynky shows it beside each camera:
+
+```bash
+LOCATION_TZ=The Cabin=America/Denver
+```
+
+A name that matches no system, or a zone from Blink that Blynky does not
+recognise, is logged as a warning.
+
+Summaries written before a location's zone changed covered the old days.
+They stay, marked out of date, so each has an **Update** button to write it
+again on the new days.
 
 ## What the model saw
 

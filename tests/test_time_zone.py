@@ -64,21 +64,22 @@ def motion(slug, stamp, summary="a fox"):
 
 @pytest.fixture
 def two_places(monkeypatch, zone):
-    """Put the server on New York time, with a cabin in Denver."""
+    """Put the server on New York time, with a cabin Blink says is in Denver."""
     zone("America/New_York")
     monkeypatch.setattr(config, "TIME_ZONE", "America/New_York")
-    monkeypatch.setenv(
-        "LOCATION_TZ", "The Cabin = America/Denver, Home=America/New_York"
-    )
-    monkeypatch.setattr(config, "LOCATION_TZ", config._location_zones())
+    monkeypatch.setattr(config, "LOCATION_TZ", {})
     summaries = daily.Daily(locate=lambda: {"deck": "The Cabin", "porch": "Home"})
     summaries.scopes = list(daily.SCOPES)
+    summaries.set_zones({"The Cabin": "America/Denver", "Home": "America/New_York"})
     return summaries
 
 
-def test_location_tz_parses_and_drops_the_default(two_places):
-    # Home is the server's zone already, so only the cabin is listed.
-    assert config.LOCATION_TZ == {"the-cabin": "America/Denver"}
+def test_location_tz_parses_every_entry(monkeypatch):
+    monkeypatch.setenv("LOCATION_TZ", "The Cabin = America/Denver, Home=UTC")
+    assert config._location_zones() == {
+        "the-cabin": "America/Denver",
+        "home": "UTC",
+    }
 
 
 @pytest.mark.parametrize(
@@ -88,6 +89,25 @@ def test_location_tz_refuses_what_it_cannot_read(monkeypatch, value):
     monkeypatch.setenv("LOCATION_TZ", value)
     with pytest.raises(SystemExit):
         config._location_zones()
+
+
+def test_a_location_in_the_servers_zone_is_the_default(two_places):
+    # Home is where the server is: nothing about its days changes.
+    assert two_places.zone_name("porch") is None
+    assert two_places.zone_name("_location-home") is None
+    assert two_places.zone_names() == {"America/Denver"}
+
+
+def test_location_tz_overrides_blink(monkeypatch, two_places):
+    monkeypatch.setattr(config, "LOCATION_TZ", {"the-cabin": "America/New_York"})
+    changed = two_places.set_zones(
+        {"The Cabin": "America/Denver", "Home": "America/New_York"}
+    )
+    assert changed
+    assert two_places.zone_name("deck") is None
+    assert not two_places.set_zones(
+        {"The Cabin": "America/Denver", "Home": "America/New_York"}
+    )
 
 
 def test_each_summary_splits_days_in_its_own_zone(two_places):
@@ -119,10 +139,13 @@ def test_zones_and_groups_name_the_cabin(two_places):
     }
 
 
-def test_nothing_pending_until_the_cameras_are_known(monkeypatch, two_places):
-    monkeypatch.setattr(two_places, "_locate", dict)
+def test_nothing_pending_until_blink_says_where_things_are(monkeypatch):
+    summaries = daily.Daily(locate=lambda: {"deck": "The Cabin"})
+    summaries.scopes = ["camera"]
     record = motion("deck", "2020-01-01T12:00:00+00:00")
-    assert two_places.pending([record]) == []
+    assert summaries.pending([record]) == []
+    summaries.set_zones({"The Cabin": "America/Denver"})
+    assert [slug for slug, _, _ in summaries.pending([record])] == ["deck"]
 
 
 async def test_each_zone_gets_its_own_night(monkeypatch, two_places):
@@ -133,9 +156,6 @@ async def test_each_zone_gets_its_own_night(monkeypatch, two_places):
         daily = two_places
         _daily_auto = None
         _daily_covered = {}
-
-        def _camera_locations(self):
-            return {"deck": "The Cabin"}
 
         async def _run_daily_auto(self, due):
             asked.append(due)
@@ -161,7 +181,7 @@ async def test_each_zone_gets_its_own_night(monkeypatch, two_places):
 def test_a_summary_from_another_zone_can_be_written_again(two_places):
     record = motion("deck", "2026-10-02T04:30:00+00:00")
     entry = {"summary": "quiet", "described": 1}
-    # Written before LOCATION_TZ: on the server's days, so out of date now.
+    # Written before the cabin had its own zone: on the server's days.
     two_places._entries[("deck", "2026-10-01")] = entry
     assert two_places.day([record], "deck", "2026-10-01")["stale"]
     entry["time_zone"] = "America/Denver"
@@ -172,12 +192,37 @@ def test_a_summary_from_another_zone_can_be_written_again(two_places):
     assert not two_places.day([porch], "porch", "2026-10-02")["stale"]
 
 
-def test_warns_once_about_a_location_blink_does_not_have(
-    monkeypatch, two_places, caplog
-):
+def test_warns_once_about_what_it_cannot_use(monkeypatch, two_places, caplog):
     monkeypatch.setattr(config, "LOCATION_TZ", {"the-cabn": "America/Denver"})
-    two_places.zones()
-    two_places.zones()
-    warned = [r for r in caplog.records if "LOCATION_TZ" in r.getMessage()]
-    assert len(warned) == 1
-    assert "the-cabn" in warned[0].getMessage()
+    for _ in range(2):
+        two_places.set_zones({"The Cabin": "Mars/Olympus", "Home": "America/New_York"})
+    warned = [r.getMessage() for r in caplog.records]
+    assert len(warned) == 2
+    assert any("the-cabn" in message for message in warned)
+    assert any("Mars/Olympus" in message for message in warned)
+    # A zone Blink gets wrong leaves that location on the server's days.
+    assert two_places.zone_name("deck") is None
+
+
+def test_reads_each_systems_zone_off_the_homescreen():
+    class Blink:
+        homescreen = {
+            "networks": [
+                {"id": 1, "name": "Cabin", "time_zone": "America/Denver"},
+                {"id": 2, "name": "Home", "time_zone": "America/New_York"},
+                {"id": 3, "name": "Shed"},
+            ]
+        }
+
+    class Stub:
+        blink = Blink()
+
+        def _current_systems(self):
+            # The name Blynky files a system's cameras under.
+            return {"1": "The Cabin", "2": "Home", "3": "Shed"}
+
+    assert monitor.Monitor._system_zones(Stub()) == {
+        "The Cabin": "America/Denver",
+        "Home": "America/New_York",
+        "Shed": None,
+    }

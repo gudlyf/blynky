@@ -367,17 +367,18 @@ def _time_zone():
     POSIX rule) quietly leaves it on UTC instead.
     """
     name = os.environ.get("TZ", "").strip().removeprefix(":")
-    if not name:
-        return None
+    return name if name and keeps_local_clock(name) else None
+
+
+def keeps_local_clock(name):
+    """Whether a named zone keeps this process's clock, in winter and summer."""
     try:
         zone = ZoneInfo(name)
     except (KeyError, ValueError, OSError):
-        return None
+        return False
     year = datetime.now().year
     instants = [datetime(year, month, 1, 12).astimezone() for month in (1, 7)]
-    if all(t.astimezone(zone).utcoffset() == t.utcoffset() for t in instants):
-        return name
-    return None
+    return all(t.astimezone(zone).utcoffset() == t.utcoffset() for t in instants)
 
 
 TIME_ZONE = _time_zone()
@@ -386,9 +387,9 @@ TIME_ZONE = _time_zone()
 def _location_zones():
     """Parse LOCATION_TZ into {slug of a location's name: IANA zone}.
 
-    For cameras that are not where the server is: each Blink system (a
-    location) named here has its days run midnight to midnight in its own
-    zone. A zone the same as TZ is left out, being the default already.
+    Each Blink system (a location) already says which zone it is in, and its
+    cameras' days follow that. These override it, for a system whose zone is
+    set wrong in the Blink app.
     """
     found = {}
     for item in os.environ.get("LOCATION_TZ", "").split(","):
@@ -404,8 +405,7 @@ def _location_zones():
             ZoneInfo(zone)
         except (KeyError, ValueError, OSError):
             raise SystemExit(f"LOCATION_TZ: {zone!r} is not a time zone.") from None
-        if zone != TIME_ZONE:
-            found[slugify(name)] = zone
+        found[slugify(name)] = zone
     return found
 
 

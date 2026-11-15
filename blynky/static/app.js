@@ -44,7 +44,7 @@ const daily = {
   pending: 0,   // past days with descriptions and no summary
   clips: 0,     // descriptions those days hold
   tokens: 0,    // the server's rough estimate of what sending them costs
-  zones: {},    // camera slug: its zone, where LOCATION_TZ gives it one
+  zones: {},    // camera slug: its zone, where its location is not home's
 };
 
 // Days run midnight to midnight where the server is: its summaries cover
@@ -2093,7 +2093,7 @@ function setHomeZone(zone) {
   return true;
 }
 
-// A camera's own zone, where LOCATION_TZ gives its location one: its clips
+// A camera's own zone, where its location is not home's: its clips
 // are timed, and its days split, where it is. `item` is a camera, a record
 // or an event - anything with a slug, or failing that a camera's name.
 function zoneOf(item) {
@@ -2118,9 +2118,12 @@ function format(options, locale = [], zone = homeZone) {
   return formatter;
 }
 
-// A time away from home says which zone it is in: "7:30 PM MST".
+// A time away from home says which zone it is in: "7:30 PM MST". With no
+// home zone from the server, home is the browser's own, by name.
+const browserZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
 function zoned(options, zone) {
-  return zone === homeZone ? options : { ...options, timeZoneName: "short" };
+  const here = (zone ?? browserZone) === (homeZone ?? browserZone);
+  return here ? options : { ...options, timeZoneName: "short" };
 }
 
 // An instant's wall clock in a zone, as numbers.
