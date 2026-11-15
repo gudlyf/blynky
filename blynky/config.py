@@ -1,7 +1,10 @@
 """Runtime configuration, all overridable by environment variable."""
 
 import os
+import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -9,6 +12,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Values already in the real environment win; .env only fills the gaps.
 load_dotenv(ROOT / ".env")
+
+# Python reads TZ once, at startup, so a TZ that only .env supplied - running
+# outside Docker - would otherwise be ignored. Windows has no tzset.
+if os.environ.get("TZ", "").strip() and hasattr(time, "tzset"):
+    time.tzset()
 
 
 def _number(name, default, kind, noun):
@@ -344,6 +352,34 @@ DAILY_HOUR = _int("DAILY_HOUR", 1)
 # road can log hundreds a day, and past a point more lines add tokens, not
 # insight; a day over the limit is sampled evenly across its hours.
 DAILY_MAX_CLIPS = _int("DAILY_MAX_CLIPS", 300)
+
+
+def _time_zone():
+    """Name the zone TZ puts this process in, for the browser, or None.
+
+    Days - summaries, the library's headings - run midnight to midnight in
+    one zone, and the browser has to split them where the server does. Only
+    a TZ someone set counts: a container left alone is on UTC, and its
+    viewers are better served by their own clocks than by that. Nor is a TZ
+    trusted unless it agrees with the clock this process actually keeps, in
+    winter and in summer, since one the system cannot load (no tzdata, a
+    POSIX rule) quietly leaves it on UTC instead.
+    """
+    name = os.environ.get("TZ", "").strip().removeprefix(":")
+    if not name:
+        return None
+    try:
+        zone = ZoneInfo(name)
+    except (KeyError, ValueError, OSError):
+        return None
+    year = datetime.now().year
+    instants = [datetime(year, month, 1, 12).astimezone() for month in (1, 7)]
+    if all(t.astimezone(zone).utcoffset() == t.utcoffset() for t in instants):
+        return name
+    return None
+
+
+TIME_ZONE = _time_zone()
 
 # Seconds between days while a backfill works through them, for the same
 # reason as BACKFILL_PAUSE: live motion shares the model.

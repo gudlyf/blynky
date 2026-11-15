@@ -168,7 +168,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `DAILY_HOUR` | `1` | Hour, server time, after which yesterday is summarized |
 | `DAILY_MAX_CLIPS` | `300` | Most clip descriptions one day's summary is written from |
 | `DAILY_PAUSE` | `2` | Seconds between days while backfilling summaries |
-| `TZ` | UTC in Docker | Time zone the days are split in, such as `America/New_York`. Set it, or under Docker each day ends at midnight UTC |
+| `TZ` | UTC in Docker | Time zone the days are split in, such as `America/New_York`. Set it, or under Docker each day ends at midnight UTC. The web page shows times in this zone too |
 
 </details>
 

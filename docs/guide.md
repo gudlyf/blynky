@@ -339,7 +339,12 @@ there after its footage has been pruned. The settings are kept in
 A day runs midnight to midnight **in the server's time zone**. A container runs
 on UTC unless told otherwise, which ends each "day" in the evening for anyone
 in the Americas. Set `TZ` in `.env` (for example `TZ=America/New_York`) so the
-days are yours.
+days are yours. This works with or without Docker.
+
+The web page uses the same zone. Its day headings, and every time it shows,
+follow the server's days rather than the browser's, so a summary always sits
+over the clips it was written from, even when you look from another time zone.
+Set `TZ` to the cameras' zone if the server is somewhere else.
 
 ## What the model saw
 
