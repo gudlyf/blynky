@@ -440,7 +440,7 @@ async def summarize_day(request):
             }
         )
     # Today is still happening; a summary of half of it would read as all.
-    if day >= daily.today():
+    if day.isoformat() >= monitor.daily.today_for(request.match_info["slug"]):
         return web.json_response(
             {"status": "error", "message": "That day is not over yet."}
         )

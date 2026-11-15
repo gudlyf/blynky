@@ -158,8 +158,9 @@ class Monitor:
         self._daily_task = None
         self._daily_run = {"done": 0, "total": 0}
         self._daily_auto = None
-        # The day the unasked run last covered, so it runs once a day.
-        self._daily_covered = None
+        # The day the unasked run last covered in each zone (None being the
+        # server's own), so it runs once a day in each.
+        self._daily_covered = {}
         # One summary at a time, whichever run or button asked for it.
         self._daily_lock = asyncio.Lock()
         self._closing = False
@@ -510,6 +511,11 @@ class Monitor:
 
     async def _sync_snapshots(self, initial=False):
         """Write each camera's current thumbnail and tell the UI about it."""
+        # Where each system is, from the homescreen just read. One that came
+        # back empty says nothing, so the zones already known stand.
+        systems = self._system_zones()
+        if systems and self.daily.set_zones(systems) and not initial:
+            self._broadcast_daily()
         for name, camera in self._blink_cameras().items():
             system = self._system_of_sync(camera.sync)
             slug = slugify(name)
@@ -679,6 +685,17 @@ class Monitor:
                     system = systems.get(str(device.get("network_id")))
                     current[str(device["id"])] = self._label(system, device["name"])
         return current
+
+    def _system_zones(self):
+        """Map each system's name to the zone Blink says it is in."""
+        home = self.blink.homescreen or {}
+        systems = self._current_systems()
+        return {
+            systems.get(str(network.get("id"))) or network.get("name"): network.get(
+                "time_zone"
+            )
+            for network in home.get("networks") or []
+        }
 
     def _current_systems(self):
         """Map each system's network id to the name Blink gives it right now."""
@@ -1243,6 +1260,8 @@ class Monitor:
             "scopes": self.daily.scopes,
             # The location and whole-system summaries there can be, by key.
             "groups": self.daily.groups(),
+            # Cameras whose days run in a zone of their own, by slug.
+            "zones": self.daily.zones(),
             "running": running,
             **self._daily_run,
             **self.daily.backlog(self.library.all()),
@@ -1324,22 +1343,38 @@ class Monitor:
         _LOGGER.info("daily: backfill wrote %d of %d", written, len(pending))
 
     def _daily_tick(self):
-        """Summarize yesterday for every camera, once, when the time comes."""
+        """Summarize yesterday for every camera, once, when the time comes.
+
+        The time comes separately in each location's zone: DAILY_HOUR is the
+        hour where the cameras are.
+        """
         if not self.daily.enabled:
-            return
-        if datetime.now().astimezone().hour < config.DAILY_HOUR:
-            return
-        day = daily.yesterday()
-        if self._daily_covered == day:
             return
         if self._daily_auto is not None and not self._daily_auto.done():
             return
-        self._daily_auto = asyncio.create_task(self._run_daily_auto(day))
+        # Until the cameras are known, nobody knows which zone each is in.
+        if not self.daily.zones_known:
+            return
+        due = {}
+        for name in {None, *self.daily.zone_names()}:
+            where = daily.zone(name)
+            if datetime.now().astimezone(where).hour < config.DAILY_HOUR:
+                continue
+            day = daily.yesterday(where)
+            if self._daily_covered.get(name) != day:
+                due[name] = day
+        if due:
+            self._daily_auto = asyncio.create_task(self._run_daily_auto(due))
 
-    async def _run_daily_auto(self, day):
+    async def _run_daily_auto(self, due):
+        """Write yesterday's summaries, for each zone in `due`: {zone: day}."""
         pending = self.daily.pending(self.library.all())
-        slugs = [slug for slug, held, _ in pending if held == day]
-        for slug in slugs:
+        jobs = []
+        for slug, day, _ in pending:
+            name = self.daily.zone_name(slug)
+            if name in due and due[name] == day:
+                jobs.append((slug, day))
+        for slug, day in jobs:
             if self._closing or not self.daily.enabled:
                 return
             try:
@@ -1361,8 +1396,8 @@ class Monitor:
             await asyncio.sleep(config.DAILY_PAUSE)
         # Covered even if the model failed: retrying every minute would spend
         # tokens all day, and the day keeps its button for a manual retry.
-        self._daily_covered = day
-        if slugs:
+        self._daily_covered.update(due)
+        if jobs:
             self._broadcast_daily()
 
     def start_thumbnails(self):

@@ -7,6 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
+from slugify import slugify
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -366,20 +367,49 @@ def _time_zone():
     POSIX rule) quietly leaves it on UTC instead.
     """
     name = os.environ.get("TZ", "").strip().removeprefix(":")
-    if not name:
-        return None
+    return name if name and keeps_local_clock(name) else None
+
+
+def keeps_local_clock(name):
+    """Whether a named zone keeps this process's clock, in winter and summer."""
     try:
         zone = ZoneInfo(name)
     except (KeyError, ValueError, OSError):
-        return None
+        return False
     year = datetime.now().year
     instants = [datetime(year, month, 1, 12).astimezone() for month in (1, 7)]
-    if all(t.astimezone(zone).utcoffset() == t.utcoffset() for t in instants):
-        return name
-    return None
+    return all(t.astimezone(zone).utcoffset() == t.utcoffset() for t in instants)
 
 
 TIME_ZONE = _time_zone()
+
+
+def _location_zones():
+    """Parse LOCATION_TZ into {slug of a location's name: IANA zone}.
+
+    Each Blink system (a location) already says which zone it is in, and its
+    cameras' days follow that. These override it, for a system whose zone is
+    set wrong in the Blink app.
+    """
+    found = {}
+    for item in os.environ.get("LOCATION_TZ", "").split(","):
+        if not item.strip():
+            continue
+        name, sep, zone = item.rpartition("=")
+        name, zone = name.strip(), zone.strip()
+        if not sep or not name or not zone:
+            raise SystemExit(
+                f"LOCATION_TZ entries must be Location=Zone, not {item.strip()!r}."
+            )
+        try:
+            ZoneInfo(zone)
+        except (KeyError, ValueError, OSError):
+            raise SystemExit(f"LOCATION_TZ: {zone!r} is not a time zone.") from None
+        found[slugify(name)] = zone
+    return found
+
+
+LOCATION_TZ = _location_zones()
 
 # Seconds between days while a backfill works through them, for the same
 # reason as BACKFILL_PAUSE: live motion shares the model.

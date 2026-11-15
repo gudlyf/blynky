@@ -44,6 +44,7 @@ const daily = {
   pending: 0,   // past days with descriptions and no summary
   clips: 0,     // descriptions those days hold
   tokens: 0,    // the server's rough estimate of what sending them costs
+  zones: {},    // camera slug: its zone, where its location is not home's
 };
 
 // Days run midnight to midnight where the server is: its summaries cover
@@ -67,6 +68,7 @@ const lib = {
   next: null,           // cursor for the following page, or null at the end
   loading: false,
   generation: 0,        // bumped per reload, so a superseded page is dropped
+  span: null,           // the archive's oldest and newest stamps, for the date picker
   filters: { ...NO_FILTERS },
   viewing: null,        // index into items, or null when the viewer is closed
   closing: false,       // the viewer is on its way out through history.back()
@@ -160,7 +162,7 @@ function cameraCard(camera) {
   if (camera.captured) {
     const age = pill(relAge(camera.captured), "age");
     if (ageSeconds(camera.captured) > 3600) age.classList.add("stale");
-    age.title = `Taken ${fullTime(camera.captured)}`;
+    age.title = `Taken ${fullTime(camera.captured, zoneOf(camera))}`;
     thumb.append(age);
   }
 
@@ -180,8 +182,8 @@ function cameraCard(camera) {
   const meta = document.createElement("span");
   meta.className = "meta";
   if (camera.last_event) {
-    meta.textContent = friendlyTime(camera.last_event.stamp);
-    meta.title = `Last motion ${fullTime(camera.last_event.stamp)}`;
+    meta.textContent = friendlyTime(camera.last_event.stamp, zoneOf(camera));
+    meta.title = `Last motion ${fullTime(camera.last_event.stamp, zoneOf(camera))}`;
   }
 
   foot.append(name, meta);
@@ -316,18 +318,18 @@ function isolate(name, event, live) {
   el("detail-system").textContent = camera.sync || "";
   const stamp = el("detail-stamp");
   stamp.textContent = shown
-    ? friendlyTime(shown.stamp)
+    ? friendlyTime(shown.stamp, zoneOf(camera))
     : camera.captured
       ? `still, ${relAge(camera.captured)}`
       : "still";
-  stamp.title = shown ? fullTime(shown.stamp) : "";
+  stamp.title = shown ? fullTime(shown.stamp, zoneOf(camera)) : "";
 
   const img = el("detail-image");
   const video = el("detail-video");
   const toggle = el("toggle-media");
 
   img.src = mediaUrl((shown && shown.image) || camera.image);
-  img.alt = shown ? `${name} at ${fullTime(shown.stamp)}` : `${name}, latest still`;
+  img.alt = shown ? `${name} at ${fullTime(shown.stamp, zoneOf(camera))}` : `${name}, latest still`;
   img.hidden = false;
   video.hidden = true;
   video.pause();
@@ -436,7 +438,7 @@ function renderSummary(event, camera) {
     // would be a lie whenever the camera has one waiting behind the button.
     box.textContent =
       camera && camera.last_event
-        ? `Latest still. The last motion was ${friendlyTime(camera.last_event.stamp).toLowerCase()}.`
+        ? `Latest still. The last motion was ${friendlyTime(camera.last_event.stamp, zoneOf(camera)).toLowerCase()}.`
         : "No motion event recorded for this camera yet.";
     return;
   }
@@ -619,8 +621,8 @@ function timelineRow(record, withCamera, open, burst) {
   const time = document.createElement("time");
   time.className = "tl-time";
   time.dateTime = stamp;
-  time.textContent = friendlyTime(stamp);
-  time.title = fullTime(stamp);
+  time.textContent = friendlyTime(stamp, zoneOf(record));
+  time.title = fullTime(stamp, zoneOf(record));
   // The time and, for a burst, its clip count share the time's column.
   const when = document.createElement("span");
   when.className = "tl-when";
@@ -1099,10 +1101,8 @@ async function loadStats() {
       }),
     );
 
-    // The date picker cannot usefully offer days outside the archive.
-    const until = el("filter-until");
-    until.min = stats.oldest ? localDate(stats.oldest) : "";
-    until.max = stats.newest ? localDate(stats.newest) : "";
+    lib.span = { oldest: stats.oldest, newest: stats.newest };
+    setUntilBounds();
 
     const parts = [`${stats.total} saved`];
     if (stats.stills) parts.push(`${stats.motion} motion, ${stats.stills} stills`);
@@ -1143,7 +1143,7 @@ async function loadLibraryPage() {
   if (lib.filters.kind) params.set("kind", lib.filters.kind);
   if (lib.filters.subject) params.set("subject", lib.filters.subject);
   if (lib.filters.q) params.set("q", lib.filters.q);
-  if (lib.filters.until) params.set("until", endOfDay(lib.filters.until));
+  if (lib.filters.until) params.set("until", endOfDay(lib.filters.until, viewZone()));
   if (lib.filters.starred) params.set("starred", "1");
   if (lib.next) params.set("cursor", lib.next);
   params.set("limit", String(state.pageSize));
@@ -1176,13 +1176,14 @@ function appendLibrary(records) {
   // Day headings only make sense against what is already on screen, so the
   // last item of the previous page seeds the comparison.
   let previous = lib.items.length ? lib.items[lib.items.length - 1] : null;
+  const zone = viewZone();
 
   for (const record of records) {
-    if (!previous || dayKey(record.stamp) !== dayKey(previous.stamp)) {
+    if (!previous || dayKey(record.stamp, zone) !== dayKey(previous.stamp, zone)) {
       const heading = document.createElement("h3");
       heading.className = "day";
-      heading.textContent = dayLabel(record.stamp);
-      heading.dataset.date = localDate(record.stamp);
+      heading.textContent = dayLabel(record.stamp, zone);
+      heading.dataset.date = localDate(record.stamp, zone);
       grid.append(heading);
     }
     lib.items.push(record);
@@ -1202,7 +1203,7 @@ function libraryTile(record) {
   const tile = document.createElement("article");
   tile.className = "tile";
   tile.dataset.id = record.id;
-  tile.setAttribute("aria-label", `${record.camera}, ${fullTime(record.stamp)}`);
+  tile.setAttribute("aria-label", `${record.camera}, ${fullTime(record.stamp, zoneOf(record))}`);
 
   const thumb = document.createElement("div");
   thumb.className = "tile-thumb";
@@ -1225,7 +1226,7 @@ function libraryTile(record) {
     play.append(icon("play"));
     thumb.append(play);
   }
-  thumb.append(pill(clockTime(record.stamp), "tile-time"));
+  thumb.append(pill(clockTime(record.stamp, zoneOf(record)), "tile-time"));
   thumb.append(starButton(record));
 
   const foot = document.createElement("div");
@@ -1272,7 +1273,8 @@ function prependLibrary(record) {
   }
 
   const tile = libraryTile(record);
-  if (dayKey(record.stamp) === dayKey(first.stamp)) {
+  const zone = viewZone();
+  if (dayKey(record.stamp, zone) === dayKey(first.stamp, zone)) {
     // The day's heading is already there, and maybe its summary; the tile
     // goes directly under them.
     let after = grid.children[1] || null;
@@ -1281,8 +1283,8 @@ function prependLibrary(record) {
   } else {
     const heading = document.createElement("h3");
     heading.className = "day";
-    heading.textContent = dayLabel(record.stamp);
-    heading.dataset.date = localDate(record.stamp);
+    heading.textContent = dayLabel(record.stamp, zone);
+    heading.dataset.date = localDate(record.stamp, zone);
     grid.prepend(tile);
     grid.prepend(heading);
   }
@@ -1330,6 +1332,15 @@ function setFilterControls() {
 // letter, so the search box settles first.
 let searchTimer = null;
 
+// The date picker cannot usefully offer days outside the archive, counted
+// in the days the headings are in - which follow the camera chosen.
+function setUntilBounds() {
+  const until = el("filter-until");
+  const { oldest, newest } = lib.span || {};
+  until.min = oldest ? localDate(oldest, viewZone()) : "";
+  until.max = newest ? localDate(newest, viewZone()) : "";
+}
+
 function applyFilters() {
   clearTimeout(searchTimer);
   lib.filters.camera = el("filter-camera").value;
@@ -1340,6 +1351,7 @@ function applyFilters() {
   el("filter-starred").setAttribute("aria-pressed", String(Boolean(lib.filters.starred)));
   el("filter-clear").hidden = !hasFilters();
   syncHistory("replace");
+  setUntilBounds();
   reloadLibrary();
 }
 
@@ -1445,7 +1457,7 @@ function openViewer(index) {
   lib.viewing = index;
 
   el("viewer-camera").textContent = record.camera;
-  el("viewer-stamp").textContent = fullTime(record.stamp);
+  el("viewer-stamp").textContent = fullTime(record.stamp, zoneOf(record));
   el("viewer-pos").textContent = `${index + 1} of ${lib.items.length}${lib.next ? "+" : ""}`;
 
   const img = el("viewer-image");
@@ -1471,7 +1483,7 @@ function openViewer(index) {
     video.removeAttribute("src");
     video.hidden = true;
     img.src = mediaUrl(record.image);
-    img.alt = `${record.camera} at ${fullTime(record.stamp)}`;
+    img.alt = `${record.camera} at ${fullTime(record.stamp, zoneOf(record))}`;
     img.hidden = false;
   }
 
@@ -1960,8 +1972,8 @@ function fillMotionToast(node, event, clips) {
   title.textContent = event.camera;
   const when = document.createElement("time");
   when.dateTime = event.stamp;
-  when.textContent =
-    clips > 1 ? `${clockTime(event.stamp)} · ${clips} clips` : clockTime(event.stamp);
+  const clock = clockTime(event.stamp, zoneOf(event));
+  when.textContent = clips > 1 ? `${clock} · ${clips} clips` : clock;
 
   const text = document.createElement("span");
   text.className = event.summary ? "toast-text" : "toast-text pending";
@@ -2081,19 +2093,41 @@ function setHomeZone(zone) {
   return true;
 }
 
+// A camera's own zone, where its location is not home's: its clips
+// are timed, and its days split, where it is. `item` is a camera, a record
+// or an event - anything with a slug, or failing that a camera's name.
+function zoneOf(item) {
+  const slug = item?.slug ?? state.cameras?.get(item?.camera)?.slug;
+  return (slug && daily.zones?.[slug]) || homeZone;
+}
+
+// The zone the library's day headings are in: the camera's, when narrowed
+// to one, so they match its summaries; otherwise home's.
+function viewZone() {
+  return lib.filters.camera ? zoneOf({ slug: lib.filters.camera }) : homeZone;
+}
+
 // Tiles format their times by the hundred, so each formatter is made once.
-function format(options, locale = []) {
-  const key = JSON.stringify([locale, options]);
+function format(options, locale = [], zone = homeZone) {
+  const key = JSON.stringify([locale, zone, options]);
   let formatter = formats.get(key);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: homeZone });
+    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: zone });
     formats.set(key, formatter);
   }
   return formatter;
 }
 
-// An instant's wall clock at home, as numbers.
-function wallClock(date) {
+// A time away from home says which zone it is in: "7:30 PM MST". With no
+// home zone from the server, home is the browser's own, by name.
+const browserZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+function zoned(options, zone) {
+  const here = (zone ?? browserZone) === (homeZone ?? browserZone);
+  return here ? options : { ...options, timeZoneName: "short" };
+}
+
+// An instant's wall clock in a zone, as numbers.
+function wallClock(date, zone = homeZone) {
   const parts = format(
     {
       year: "numeric",
@@ -2105,6 +2139,7 @@ function wallClock(date) {
       hourCycle: "h23",
     },
     "en-US",
+    zone,
   ).formatToParts(date);
   const value = (type) => Number(parts.find((part) => part.type === type).value);
   return {
@@ -2117,20 +2152,20 @@ function wallClock(date) {
   };
 }
 
-// How far home is ahead of UTC at an instant, in milliseconds.
-function homeOffset(time) {
-  const c = wallClock(new Date(time));
+// How far a zone is ahead of UTC at an instant, in milliseconds.
+function homeOffset(time, zone = homeZone) {
+  const c = wallClock(new Date(time), zone);
   const wall = Date.UTC(c.year, c.month - 1, c.day, c.hour, c.minute, c.second);
   return wall - Math.floor(time / 1000) * 1000;
 }
 
-// The instant a calendar day starts at home. Guess with the offset at UTC
+// The instant a calendar day starts in a zone. Guess with the offset at UTC
 // midnight, then check once more in case that guess crossed a DST change.
-function homeMidnight(day) {
+function homeMidnight(day, zone = homeZone) {
   const [year, month, date] = day.split("-").map(Number);
   const guess = Date.UTC(year, month - 1, date);
-  let start = guess - homeOffset(guess);
-  const offset = homeOffset(start);
+  let start = guess - homeOffset(guess, zone);
+  const offset = homeOffset(start, zone);
   if (guess - offset !== start) start = guess - offset;
   return start;
 }
@@ -2149,91 +2184,100 @@ function dayDiff(later, earlier) {
   return Math.round((utc(later) - utc(earlier)) / 86400000);
 }
 
-function shortTime(stamp) {
+function shortTime(stamp, zone = homeZone) {
   if (!stamp) return "";
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp;
-  return format({
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return format(
+    zoned({ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }, zone),
+    [],
+    zone,
+  ).format(date);
 }
 
 // "Today 5:02 PM", "Yesterday 1:39 PM", "Tue 8:10 AM", then a date: what
 // someone glancing at a list of events actually wants to know first.
-function friendlyTime(stamp) {
+function friendlyTime(stamp, zone = homeZone) {
   if (!stamp) return "";
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp;
-  const clock = clockTime(stamp);
-  const days = dayDiff(localDate(new Date()), localDate(date));
+  const clock = clockTime(stamp, zone);
+  const days = dayDiff(localDate(new Date(), zone), localDate(date, zone));
   if (days === 0) return `Today ${clock}`;
   if (days === 1) return `Yesterday ${clock}`;
   if (days > 1 && days < 7) {
-    return `${format({ weekday: "short" }).format(date)} ${clock}`;
+    return `${format({ weekday: "short" }, [], zone).format(date)} ${clock}`;
   }
-  return format({
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  return format(
+    zoned({ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }, zone),
+    [],
+    zone,
+  ).format(date);
 }
 
-function clockTime(stamp) {
+function clockTime(stamp, zone = homeZone) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp || "";
-  return format({ hour: "numeric", minute: "2-digit" }).format(date);
+  return format(zoned({ hour: "numeric", minute: "2-digit" }, zone), [], zone).format(date);
 }
 
-function fullTime(stamp) {
+function fullTime(stamp, zone = homeZone) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp || "";
-  return format({
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
+  return format(
+    zoned(
+      {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      },
+      zone,
+    ),
+    [],
+    zone,
+  ).format(date);
 }
 
-// The calendar day an instant falls on at home, as YYYY-MM-DD: what a date
+// The calendar day an instant falls on in a zone, as YYYY-MM-DD: what a date
 // input and the server's summaries both speak.
-function localDate(stamp) {
+function localDate(stamp, zone = homeZone) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return "";
-  const { year, month, day } = wallClock(date);
+  const { year, month, day } = wallClock(date, zone);
   const pad = (n) => String(n).padStart(2, "0");
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-// The last instant of a calendar day at home, as the archive's ISO stamp.
-function endOfDay(day) {
-  return new Date(homeMidnight(shiftDay(day, 1)) - 1).toISOString();
+// The last instant of a calendar day in a zone, as the archive's ISO stamp.
+function endOfDay(day, zone = homeZone) {
+  return new Date(homeMidnight(shiftDay(day, 1), zone) - 1).toISOString();
 }
 
 // Day headings group the archive by the same days the summaries cover.
-function dayKey(stamp) {
-  return localDate(stamp) || String(stamp);
+function dayKey(stamp, zone = homeZone) {
+  return localDate(stamp, zone) || String(stamp);
 }
 
-function dayLabel(stamp) {
+function dayLabel(stamp, zone = homeZone) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return String(stamp);
-  const today = localDate(new Date());
-  const day = localDate(date);
+  const today = localDate(new Date(), zone);
+  const day = localDate(date, zone);
   if (day === today) return "Today";
   if (day === shiftDay(today, -1)) return "Yesterday";
-  return format({
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: day.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric",
-  }).format(date);
+  return format(
+    {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: day.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric",
+    },
+    [],
+    zone,
+  ).format(date);
 }
 
 function humanBytes(size) {
@@ -2493,7 +2537,7 @@ function matchesFilters(record) {
   if (starred && !record.starred) return false;
   if (kind && record.kind !== kind) return false;
   if (subject && !(record.subjects || []).includes(subject)) return false;
-  if (until && new Date(record.stamp) > new Date(endOfDay(until))) return false;
+  if (until && new Date(record.stamp) > new Date(endOfDay(until, viewZone()))) return false;
   if (q) {
     const { tags, text } = splitSearch(q);
     if (tags.some((tag) => !(record.tags || []).includes(tag))) return false;
@@ -2559,10 +2603,15 @@ function connect() {
 
     if (data.type === "daily") {
       const before = daily.scopes.join();
+      const zones = JSON.stringify(daily.zones);
       Object.assign(daily, data.daily);
       if (daily.scopes.join() !== before) {
         days.slug = null;
         removeDaySummaries();
+      }
+      if (JSON.stringify(daily.zones) !== zones && lib.open) {
+        setUntilBounds();
+        reloadLibrary();
       }
       renderDaily();
       return;
@@ -2574,10 +2623,12 @@ function connect() {
     }
 
     if (data.type === "state") {
-      const rezoned = setHomeZone(data.time_zone);
+      let rezoned = setHomeZone(data.time_zone);
       state.ntfy = data.ntfy || null;
       renderNtfy();
+      const zones = JSON.stringify(daily.zones);
       if (data.daily) Object.assign(daily, data.daily);
+      if (JSON.stringify(daily.zones) !== zones) rezoned = true;
       // Summaries written while the socket was down reached nobody.
       days.slug = null;
       renderDaily();
@@ -2809,7 +2860,7 @@ async function openEvent(id) {
     return;
   }
 
-  await openLibraryWith({ camera: record.slug, until: localDate(record.stamp) });
+  await openLibraryWith({ camera: record.slug, until: localDate(record.stamp, zoneOf(record)) });
   // Anything that camera caught later the same day comes first. Page down to
   // it, giving up if the filters change underneath or a page brings nothing.
   const generation = lib.generation;
@@ -3232,10 +3283,10 @@ function mergeDay(slug, day) {
   renderDays();
 }
 
-// "2026-11-03" is a calendar day where the server is, not an instant, so it
-// is read as noon there - safely that day whatever the offset.
-function dayStamp(date) {
-  return new Date(homeMidnight(date) + 12 * 3600 * 1000).toISOString();
+// "2026-11-03" is a calendar day where its summary's days run, not an
+// instant, so it is read as noon there - safely that day whatever the offset.
+function dayStamp(date, zone = homeZone) {
+  return new Date(homeMidnight(date, zone) + 12 * 3600 * 1000).toISOString();
 }
 
 function renderDays() {
@@ -3249,7 +3300,8 @@ function renderDays() {
     const label = document.createElement("button");
     label.type = "button";
     label.className = "daily-day";
-    label.textContent = dayLabel(dayStamp(day.date));
+    const zone = zoneOf({ slug });
+    label.textContent = dayLabel(dayStamp(day.date, zone), zone);
     label.title = "Show this day in the library";
     label.addEventListener("click", () => openLibraryWith({ camera: slug, until: day.date }));
     const count = document.createElement("span");
@@ -3301,13 +3353,25 @@ function daySummaryContent(slug, day) {
 }
 
 // The summaries that head each day in the library as it is filtered now:
-// the camera's own when narrowed to one, otherwise every camera's together
-// and each location's - whichever of those are being written.
+// the camera's own and its location's when narrowed to one, otherwise every
+// camera's together and each location's - whichever of those are being
+// written. A location whose days are not home's is only shown narrowed to
+// one of its cameras, the one view whose headings are its days.
 function librarySummaries() {
   if (!daily.enabled) return [];
+  const writing = (group) => daily.scopes.includes(group.kind);
   const slug = lib.filters.camera;
-  if (slug) return daily.scopes.includes("camera") ? [{ key: slug, name: null }] : [];
-  return daily.groups.filter((group) => daily.scopes.includes(group.kind));
+  if (slug) {
+    const camera = [...state.cameras.values()].find((c) => c.slug === slug);
+    const location = daily.groups.find(
+      (group) => group.kind === "location" && camera?.sync && group.name === camera.sync,
+    );
+    return [
+      ...(daily.scopes.includes("camera") ? [{ key: slug, name: null }] : []),
+      ...(location && writing(location) ? [location] : []),
+    ];
+  }
+  return daily.groups.filter((group) => writing(group) && !group.time_zone);
 }
 
 // The library opens each past day with what the model made of it. One
@@ -3315,7 +3379,7 @@ function librarySummaries() {
 function addDaySummaries() {
   const wanted = librarySummaries();
   if (!wanted.length) return;
-  const today = localDate(new Date().toISOString());
+  const today = localDate(new Date(), viewZone());
   for (const heading of el("library-grid").querySelectorAll("h3.day[data-date]")) {
     const date = heading.dataset.date;
     if (date >= today) continue;
