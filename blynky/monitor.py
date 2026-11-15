@@ -206,6 +206,8 @@ class Monitor:
             "events": list(self.events),
             "ntfy": notify.status(),
             "daily": self.daily_status(),
+            # Where days start and end: the browser splits them here too.
+            "time_zone": config.TIME_ZONE,
         }
 
     def broadcast_ntfy(self):

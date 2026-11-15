@@ -46,6 +46,14 @@ const daily = {
   tokens: 0,    // the server's rough estimate of what sending them costs
 };
 
+// Days run midnight to midnight where the server is: its summaries cover
+// those days, so the library's headings and every clock beside them have to
+// split them there too, or a summary would sit over another day's clips.
+// The server names its zone in the state message when TZ is set; without
+// one this is the browser's own. Each formatter is kept, made once per zone.
+let homeZone;
+const formats = new Map();
+
 // The days listed under the camera on screen, newest first.
 const days = { slug: null, list: [], more: false, loading: false, busy: new Set() };
 
@@ -152,7 +160,7 @@ function cameraCard(camera) {
   if (camera.captured) {
     const age = pill(relAge(camera.captured), "age");
     if (ageSeconds(camera.captured) > 3600) age.classList.add("stale");
-    age.title = `Taken ${new Date(camera.captured).toLocaleString()}`;
+    age.title = `Taken ${fullTime(camera.captured)}`;
     thumb.append(age);
   }
 
@@ -2057,16 +2065,100 @@ for (const type of ["pointerdown", "keydown"]) {
 
 // ------------------------------------------------------------------ helpers
 
+// Days and clocks are read in homeZone, declared at the top.
+
+// Whether the zone changed, so whatever is on screen has to be drawn again.
+function setHomeZone(zone) {
+  let next = zone || undefined;
+  try {
+    if (next) new Intl.DateTimeFormat([], { timeZone: next });
+  } catch {
+    next = undefined;
+  }
+  if (next === homeZone) return false;
+  homeZone = next;
+  formats.clear();
+  return true;
+}
+
+// Tiles format their times by the hundred, so each formatter is made once.
+function format(options, locale = []) {
+  const key = JSON.stringify([locale, options]);
+  let formatter = formats.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: homeZone });
+    formats.set(key, formatter);
+  }
+  return formatter;
+}
+
+// An instant's wall clock at home, as numbers.
+function wallClock(date) {
+  const parts = format(
+    {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      hourCycle: "h23",
+    },
+    "en-US",
+  ).formatToParts(date);
+  const value = (type) => Number(parts.find((part) => part.type === type).value);
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+// How far home is ahead of UTC at an instant, in milliseconds.
+function homeOffset(time) {
+  const c = wallClock(new Date(time));
+  const wall = Date.UTC(c.year, c.month - 1, c.day, c.hour, c.minute, c.second);
+  return wall - Math.floor(time / 1000) * 1000;
+}
+
+// The instant a calendar day starts at home. Guess with the offset at UTC
+// midnight, then check once more in case that guess crossed a DST change.
+function homeMidnight(day) {
+  const [year, month, date] = day.split("-").map(Number);
+  const guess = Date.UTC(year, month - 1, date);
+  let start = guess - homeOffset(guess);
+  const offset = homeOffset(start);
+  if (guess - offset !== start) start = guess - offset;
+  return start;
+}
+
+// "2026-11-03" moved by whole days, as calendar arithmetic with no zone.
+function shiftDay(day, by) {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, date + by)).toISOString().slice(0, 10);
+}
+
+function dayDiff(later, earlier) {
+  const utc = (day) => {
+    const [year, month, date] = day.split("-").map(Number);
+    return Date.UTC(year, month - 1, date);
+  };
+  return Math.round((utc(later) - utc(earlier)) / 86400000);
+}
+
 function shortTime(stamp) {
   if (!stamp) return "";
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp;
-  return date.toLocaleString([], {
+  return format({
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+  }).format(date);
 }
 
 // "Today 5:02 PM", "Yesterday 1:39 PM", "Tue 8:10 AM", then a date: what
@@ -2075,80 +2167,73 @@ function friendlyTime(stamp) {
   if (!stamp) return "";
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp;
-  const clock = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const days = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+  const clock = clockTime(stamp);
+  const days = dayDiff(localDate(new Date()), localDate(date));
   if (days === 0) return `Today ${clock}`;
   if (days === 1) return `Yesterday ${clock}`;
   if (days > 1 && days < 7) {
-    return `${date.toLocaleDateString([], { weekday: "short" })} ${clock}`;
+    return `${format({ weekday: "short" }).format(date)} ${clock}`;
   }
-  return date.toLocaleString([], {
+  return format({
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
-}
-
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  }).format(date);
 }
 
 function clockTime(stamp) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp || "";
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return format({ hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 function fullTime(stamp) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return stamp || "";
-  return date.toLocaleString([], {
+  return format({
     weekday: "short",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
+  }).format(date);
 }
 
-// A date input speaks in local calendar days; the archive speaks in instants.
+// The calendar day an instant falls on at home, as YYYY-MM-DD: what a date
+// input and the server's summaries both speak.
 function localDate(stamp) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return "";
+  const { year, month, day } = wallClock(date);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-// The last instant of a local calendar day, as the archive's ISO stamp.
+// The last instant of a calendar day at home, as the archive's ISO stamp.
 function endOfDay(day) {
-  const [year, month, date] = day.split("-").map(Number);
-  return new Date(year, month - 1, date, 23, 59, 59, 999).toISOString();
+  return new Date(homeMidnight(shiftDay(day, 1)) - 1).toISOString();
 }
 
-// Day headings are grouped in the viewer's local time, which is what someone
-// scrolling the archive is actually thinking in.
+// Day headings group the archive by the same days the summaries cover.
 function dayKey(stamp) {
-  const date = new Date(stamp);
-  if (Number.isNaN(date.getTime())) return String(stamp);
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  return localDate(stamp) || String(stamp);
 }
 
 function dayLabel(stamp) {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) return String(stamp);
-  const today = dayKey(new Date().toISOString());
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (dayKey(stamp) === today) return "Today";
-  if (dayKey(stamp) === dayKey(yesterday.toISOString())) return "Yesterday";
-  return date.toLocaleDateString([], {
+  const today = localDate(new Date());
+  const day = localDate(date);
+  if (day === today) return "Today";
+  if (day === shiftDay(today, -1)) return "Yesterday";
+  return format({
     weekday: "long",
     month: "long",
     day: "numeric",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-  });
+    year: day.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric",
+  }).format(date);
 }
 
 function humanBytes(size) {
@@ -2238,12 +2323,12 @@ function renderLastCheck() {
   else if (seconds < 5400) rel.textContent = `${Math.round(seconds / 60)}m ago`;
   else rel.textContent = `${Math.round(seconds / 3600)}h ago`;
 
-  abs.textContent = when.toLocaleTimeString([], {
+  abs.textContent = format({
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
-  box.title = `Last completed check for motion: ${when.toLocaleString()}`;
+  }).format(when);
+  box.title = `Last completed check for motion: ${fullTime(state.lastPoll)}`;
 
   // A poll is overdue once it is well past its interval - the loop is wedged
   // or Blink is unreachable.
@@ -2489,6 +2574,7 @@ function connect() {
     }
 
     if (data.type === "state") {
+      const rezoned = setHomeZone(data.time_zone);
       state.ntfy = data.ntfy || null;
       renderNtfy();
       if (data.daily) Object.assign(daily, data.daily);
@@ -2508,6 +2594,12 @@ function connect() {
       state.feeds.clear();
       if (state.peopleOnly) loadTimelineFeed("");
       lib.stale = true;
+      // An open library is not refetched on reconnect, but its day headings
+      // and date picker move with the zone.
+      if (rezoned && lib.open) {
+        reloadLibrary();
+        loadStats();
+      }
       // So is the end of a describe run, which would leave its button stuck.
       if (lib.open) refreshBackfill();
       applyStatus(data.status, data.message);
@@ -3141,10 +3233,9 @@ function mergeDay(slug, day) {
 }
 
 // "2026-11-03" is a calendar day where the server is, not an instant, so it
-// is read as local noon - safely that day whatever the offset.
+// is read as noon there - safely that day whatever the offset.
 function dayStamp(date) {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day, 12).toISOString();
+  return new Date(homeMidnight(date) + 12 * 3600 * 1000).toISOString();
 }
 
 function renderDays() {
