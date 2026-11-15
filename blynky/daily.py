@@ -20,9 +20,11 @@ footage it was written from: retention prunes clips, never these.
 """
 
 import asyncio
+import functools
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from slugify import slugify
 
@@ -51,15 +53,21 @@ def location_key(name):
     return f"{_LOCATION}{slugify(name)}"
 
 
-def _local(stamp):
-    """Return a capture's time in the server's time zone, or None."""
+@functools.cache
+def zone(name):
+    """Return a zone by name, or None - the server's own - for no name."""
+    return ZoneInfo(name) if name else None
+
+
+def _local(stamp, where=None):
+    """Return a capture's time in a zone, the server's by default, or None."""
     parsed = library.parse_stamp(stamp)
-    return parsed.astimezone() if parsed else None
+    return parsed.astimezone(where) if parsed else None
 
 
-def today():
-    """Return today's date in the server's time zone."""
-    return datetime.now().astimezone().date()
+def today(where=None):
+    """Return today's date in a zone, the server's by default."""
+    return datetime.now().astimezone(where).date()
 
 
 def parse_day(value):
@@ -89,15 +97,16 @@ def _sample(records, limit):
     return [records[int(i * step)] for i in range(limit)]
 
 
-def lines_for(records, cameras=False):
+def lines_for(records, cameras=False, where=None):
     """Format a day's described clips as the model is shown them, oldest first.
 
     With `cameras`, each line says which camera it came from, for a summary
-    written from several.
+    written from several. Times are in `where`, the summary's zone, so that
+    evening reads as evening where the cameras are.
     """
     ordered = sorted(records, key=lambda record: _local(record["stamp"]))
     return [
-        f"{_local(record['stamp']):%H:%M} "
+        f"{_local(record['stamp'], where):%H:%M} "
         f"{record['camera'] + ': ' if cameras else ''}"
         f"{' '.join(record['summary'].split())}"
         for record in _sample(ordered, config.DAILY_MAX_CLIPS)
@@ -136,6 +145,8 @@ class Daily:
         self.notify = config.NTFY_DAILY
         # Which kinds of summary are written, from SCOPES.
         self.scopes = list(config.DAILY_SCOPES)
+        # LOCATION_TZ names already warned about, so the log says it once.
+        self._warned = set()
 
     # -- persistence ------------------------------------------------------
 
@@ -225,10 +236,70 @@ class Daily:
 
     def groups(self):
         """List the summaries beyond each camera's, for the UI to show."""
-        found = {ALL: {"key": ALL, "kind": "all", "name": "All cameras"}}
+        found = {
+            ALL: {"key": ALL, "kind": "all", "name": "All cameras", "time_zone": None}
+        }
         for key, name in sorted(self._locations().values(), key=lambda kv: kv[1]):
-            found.setdefault(key, {"key": key, "kind": "location", "name": name})
+            found.setdefault(
+                key,
+                {
+                    "key": key,
+                    "kind": "location",
+                    "name": name,
+                    "time_zone": self.zone_name(key),
+                },
+            )
         return list(found.values())
+
+    def zone_name(self, key, locations=None):
+        """Name the zone a summary's days run in, or None for the default.
+
+        A camera's and a location's days are the location's, if LOCATION_TZ
+        names one; every camera together keeps the server's.
+        """
+        if not config.LOCATION_TZ:
+            return None
+        kind = kind_of(key)
+        if kind == "all":
+            return None
+        if kind != "location":
+            if locations is None:
+                locations = self._locations()
+            held = locations.get(key)
+            if not held:
+                return None
+            key = held[0]
+        # A location's key is its name slugified, as LOCATION_TZ's are.
+        return config.LOCATION_TZ.get(key[len(_LOCATION) :])
+
+    def zones(self):
+        """Map each camera slug whose days are not the server's to its zone."""
+        if not config.LOCATION_TZ:
+            return {}
+        locations = self._locations()
+        self._warn_unmatched(locations)
+        found = {}
+        for slug in locations:
+            name = self.zone_name(slug, locations)
+            if name:
+                found[slug] = name
+        return found
+
+    def _warn_unmatched(self, locations):
+        """Say once which LOCATION_TZ names match no location Blink reports."""
+        if not locations:
+            return
+        known = {key[len(_LOCATION) :] for key, _ in locations.values()}
+        for name in config.LOCATION_TZ.keys() - known - self._warned:
+            self._warned.add(name)
+            _LOGGER.warning(
+                "LOCATION_TZ: no Blink system is called %r; its cameras keep TZ",
+                name,
+            )
+
+    def today_for(self, key, locations=None):
+        """Return today's date where a summary's days run, as YYYY-MM-DD."""
+        return today(zone(self.zone_name(key, locations))).isoformat()
 
     def _group(self, records, key=None):
         """Bucket motion by summary and local day: {(key, day): [records]}.
@@ -242,18 +313,23 @@ class Daily:
         for record in records:
             if record["kind"] != library.MOTION:
                 continue
-            when = _local(record["stamp"])
+            when = library.parse_stamp(record["stamp"])
             if when is None:
                 continue
             keys = [record["slug"], ALL]
             if record["slug"] in locations:
                 keys.append(locations[record["slug"]][0])
+            # A day per zone, not per key: this runs over the whole archive.
+            dates = {}
             for held in keys:
                 if key is not None and held != key:
                     continue
                 if key is None and kind_of(held) not in self.scopes:
                     continue
-                days.setdefault((held, when.date().isoformat()), []).append(record)
+                name = self.zone_name(held, locations)
+                if name not in dates:
+                    dates[name] = when.astimezone(zone(name)).date().isoformat()
+                days.setdefault((held, dates[name]), []).append(record)
         return days
 
     def _name(self, key, records):
@@ -283,8 +359,15 @@ class Daily:
             "summary": entry["summary"] if entry else None,
             "at": entry.get("at") if entry else None,
             # Descriptions that landed after the summary was written, such as
-            # a backfill that finished later: it can be written again.
-            "stale": bool(entry) and len(described) > (entry.get("described") or 0),
+            # a backfill that finished later, or days that have moved to
+            # another zone since: it can be written again.
+            "stale": bool(entry)
+            and (
+                len(described) > (entry.get("described") or 0)
+                # Older summaries say no zone, and were the server's.
+                or entry.get("time_zone", config.TIME_ZONE)
+                != (self.zone_name(slug) or config.TIME_ZONE)
+            ),
         }
 
     def days(self, all_records, slug, before=None, limit=14):
@@ -298,7 +381,7 @@ class Daily:
         dates.update(day for held, day in self._entries if held == slug)
         dates = [day for day in dates if not before or day < before]
         ordered = sorted(dates, reverse=True)
-        current = today().isoformat()
+        current = self.today_for(slug)
         page = [
             self._day(slug, day, grouped.get((slug, day), []), current)
             for day in ordered[:limit]
@@ -308,19 +391,25 @@ class Daily:
     def day(self, all_records, slug, day):
         """Return one camera's day as days() lists it."""
         records = self._group(all_records, slug).get((slug, day), [])
-        return self._day(slug, day, records, today().isoformat())
+        return self._day(slug, day, records, self.today_for(slug))
 
     def pending(self, all_records):
         """Return the past days that could have a summary and have none.
 
         Oldest first, as (slug, day, records), for the same reason the
         description backlog drains that way. Today is never one: it is not
-        over yet.
+        over yet. Nor is anything while LOCATION_TZ is set and the cameras are
+        not known yet: which day a clip falls on depends on where it is.
         """
-        current = today().isoformat()
+        locations = self._locations()
+        if config.LOCATION_TZ and not locations:
+            return []
+        current = {}
         found = []
         for (slug, day), records in self._group(all_records).items():
-            if day >= current or (slug, day) in self._entries:
+            if slug not in current:
+                current[slug] = self.today_for(slug, locations)
+            if day >= current[slug] or (slug, day) in self._entries:
                 continue
             described = [record for record in records if record["summary"]]
             if described:
@@ -360,11 +449,12 @@ class Daily:
                 if kind == "location"
                 else f"Every camera: {', '.join(cameras)}"
             )
+        where = self.zone_name(slug)
         summary = await vision.summarize_day(
             session,
             camera,
             date.fromisoformat(day),
-            lines_for(described, cameras=group is not None),
+            lines_for(described, cameras=group is not None, where=zone(where)),
             group=group,
         )
         if not summary:
@@ -377,6 +467,9 @@ class Daily:
             # name, the location's, or "All cameras".
             "camera": camera,
             "date": day,
+            # The zone that day ran midnight to midnight in, None for the
+            # server's own when TZ named none.
+            "time_zone": where or config.TIME_ZONE,
             "summary": summary,
             # How many descriptions it was written from, so a later one can
             # mark it as out of date.
@@ -394,9 +487,9 @@ class Daily:
             _LOGGER.warning("could not write %s: %s", _path(slug, day), error)
         self._entries[(slug, day)] = entry
         _LOGGER.info("daily: %s on %s: %s", camera, day, summary)
-        return self._day(slug, day, records, today().isoformat())
+        return self._day(slug, day, records, self.today_for(slug))
 
 
-def yesterday():
-    """Return yesterday's date as YYYY-MM-DD, in the server's time zone."""
-    return (today() - timedelta(days=1)).isoformat()
+def yesterday(where=None):
+    """Return yesterday's date as YYYY-MM-DD, in a zone, the server's by default."""
+    return (today(where) - timedelta(days=1)).isoformat()

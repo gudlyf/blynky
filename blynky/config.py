@@ -7,6 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
+from slugify import slugify
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -380,6 +381,35 @@ def _time_zone():
 
 
 TIME_ZONE = _time_zone()
+
+
+def _location_zones():
+    """Parse LOCATION_TZ into {slug of a location's name: IANA zone}.
+
+    For cameras that are not where the server is: each Blink system (a
+    location) named here has its days run midnight to midnight in its own
+    zone. A zone the same as TZ is left out, being the default already.
+    """
+    found = {}
+    for item in os.environ.get("LOCATION_TZ", "").split(","):
+        if not item.strip():
+            continue
+        name, sep, zone = item.rpartition("=")
+        name, zone = name.strip(), zone.strip()
+        if not sep or not name or not zone:
+            raise SystemExit(
+                f"LOCATION_TZ entries must be Location=Zone, not {item.strip()!r}."
+            )
+        try:
+            ZoneInfo(zone)
+        except (KeyError, ValueError, OSError):
+            raise SystemExit(f"LOCATION_TZ: {zone!r} is not a time zone.") from None
+        if zone != TIME_ZONE:
+            found[slugify(name)] = zone
+    return found
+
+
+LOCATION_TZ = _location_zones()
 
 # Seconds between days while a backfill works through them, for the same
 # reason as BACKFILL_PAUSE: live motion shares the model.

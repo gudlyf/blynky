@@ -169,6 +169,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `DAILY_MAX_CLIPS` | `300` | Most clip descriptions one day's summary is written from |
 | `DAILY_PAUSE` | `2` | Seconds between days while backfilling summaries |
 | `TZ` | UTC in Docker | Time zone the days are split in, such as `America/New_York`. Set it, or under Docker each day ends at midnight UTC. The web page shows times in this zone too |
+| `LOCATION_TZ` | empty | Zones for locations (Blink systems) elsewhere, such as `Cabin=America/Denver,Lake=America/Chicago`. Their cameras' days and times follow their own zone |
 
 </details>
 
