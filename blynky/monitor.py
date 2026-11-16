@@ -240,7 +240,7 @@ class Monitor:
         await self.people.load()
         await self.names.load()
         await notify.load()
-        email.load()
+        await email.load()
         await self.daily.load()
         self.start_thumbnails()
         creds = await json_load(config.CREDFILE)
@@ -1410,7 +1410,7 @@ class Monitor:
                             system=system,
                         )
                     if self.daily.email and email.recipient():
-                        await daily.send_email(
+                        await email.send_daily(
                             stored["camera"],
                             day,
                             stored["summary"],

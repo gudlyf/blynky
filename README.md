@@ -203,7 +203,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `SMTP_USER` | unset | SMTP username (e.g. your full Gmail address) |
 | `SMTP_PASSWORD` | unset | SMTP password or Gmail App Password |
 | `SMTP_FROM` | `SMTP_USER` | Sender address (`From` header); defaults to `SMTP_USER` |
-| `EMAIL_DAILY` | unset | `1` turns on emailing each night's daily summaries. The **Send by email** switch and **Email** recipient address in the settings menu override this. See the [guide](docs/guide.md#daily-summaries) for Gmail setup |
+| `EMAIL_DAILY` | unset | `1` starts with emailing each night's daily summaries switched on. Nothing is sent until a recipient is entered under **Email** in the settings menu, and the **Send by email** switch there overrides this once used. See the [guide](docs/guide.md#daily-summaries) for Gmail setup |
 
 </details>
 

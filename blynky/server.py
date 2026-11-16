@@ -492,18 +492,19 @@ async def ntfy(request):
 
 
 async def email_settings(request):
-    """Get or set the shared recipient email address."""
+    """Get or set the shared recipient address(es).
+
+    POST {"to": "a@example.com, b@example.com"} sets them, and "" clears them.
+    """
     if request.method == "POST":
         body = await _json_object(request)
         if "to" not in body or not isinstance(body["to"], str):
             raise web.HTTPBadRequest(reason="to must be a string")
-        to_address = body["to"].strip()
-        if to_address:
-            addrs = [a.strip() for a in to_address.split(",") if a.strip()]
-            if not addrs or not all("@" in a for a in addrs):
-                raise web.HTTPBadRequest(reason="to must be email address(es)")
-            to_address = ", ".join(addrs)
-        status = email.set_recipient(to_address)
+        try:
+            addresses = email.parse_recipients(body["to"])
+        except ValueError:
+            raise web.HTTPBadRequest(reason="to must be email address(es)") from None
+        status = await email.set_recipient(addresses)
         request.app["monitor"].broadcast_email()
         return web.json_response(status)
     return web.json_response(email.status())

@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 from slugify import slugify
 
-from . import config, email, library, vision
+from . import config, library, vision
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -553,14 +553,3 @@ class Daily:
 def yesterday(where=None):
     """Return yesterday's date as YYYY-MM-DD, in a zone, the server's by default."""
     return (today(where) - timedelta(days=1)).isoformat()
-
-
-async def send_email(camera, day, summary, system=None, to_address=None):
-    """Format and send one daily summary by email. Returns True if sent."""
-    subject = (
-        f"Blynky daily summary: {camera} ({system}) - {day}"
-        if system
-        else f"Blynky daily summary: {camera} - {day}"
-    )
-    body = f"{camera}" + (f" ({system})" if system else "") + f" — {day}\n\n{summary}\n"
-    return await email.send(to_address or email.recipient(), subject, body)

@@ -2598,7 +2598,6 @@ function connect() {
     if (data.type === "ntfy") {
       state.ntfy = data.ntfy;
       renderNtfy();
-      renderEmail();
       return;
     }
     if (data.type === "email") {
@@ -3083,6 +3082,13 @@ function renderEmail() {
   el("email-group").hidden = !(info && info.configured);
   const input = el("email-to");
   if (document.activeElement !== input) input.value = (info && info.to) || "";
+  renderEmailNote();
+}
+
+// "Send by email" with nobody to send to would do nothing, silently.
+function renderEmailNote() {
+  const on = daily.enabled && daily.smtp && daily.email;
+  el("daily-email-note").hidden = !(on && !(state.email && state.email.to));
 }
 
 function renderNtfy() {
@@ -3113,7 +3119,6 @@ function renderNtfy() {
     ntfyTimer = setTimeout(() => {
       state.ntfy = { ...info, paused: false, until: null };
       renderNtfy();
-      renderEmail();
     }, Math.max(0, left) + 1000);
   }
 }
@@ -3206,6 +3211,7 @@ function renderDaily() {
   el("daily-notify").checked = daily.notify;
   el("daily-email-row").hidden = !(daily.enabled && daily.smtp);
   el("daily-email").checked = !!daily.email;
+  renderEmailNote();
   const note = el("daily-note");
   const backfillButton = el("daily-backfill");
   const cancel = el("daily-cancel");

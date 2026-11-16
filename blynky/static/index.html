@@ -147,7 +147,7 @@
       <label class="menu-label" for="email-to" title="List of email addresses, separated by comma">Email</label>
       <input type="text" id="email-to" placeholder="you@example.com"
              autocomplete="email" aria-label="Email address(es)"
-             style="width: 100%; box-sizing: border-box;">
+             class="menu-input">
     </div>
     <!-- Also the server's setting rather than this browser's: summaries are
          written by the server, from every camera's descriptions. -->
@@ -184,6 +184,7 @@
       <input type="checkbox" id="daily-email" role="switch">
       <span>Send by email</span>
     </label>
+    <p class="menu-note menu-indent" id="daily-email-note" hidden>Enter an address under Email above to receive them.</p>
     <p class="menu-note" id="daily-note" aria-live="polite"></p>
     <div class="menu-actions" id="daily-actions" hidden>
       <button type="button" class="btn" id="daily-backfill" hidden></button>
