@@ -143,6 +143,12 @@
       </label>
       <p class="menu-note" id="ntfy-note" aria-live="polite"></p>
     </div>
+    <div id="email-group" class="menu-group" hidden>
+      <label class="menu-label" for="email-to" title="List of email addresses, separated by comma">Email</label>
+      <input type="text" id="email-to" placeholder="you@example.com"
+             autocomplete="email" aria-label="Email address(es)"
+             class="menu-input">
+    </div>
     <!-- Also the server's setting rather than this browser's: summaries are
          written by the server, from every camera's descriptions. -->
     <div class="menu-sep"></div>
@@ -173,6 +179,12 @@
       <input type="checkbox" id="daily-notify" role="switch">
       <span>Send to ntfy</span>
     </label>
+    <label class="switch menu-row menu-indent" id="daily-email-row" hidden
+           title="Email each summary of yesterday as it is written. Backfilled days are never sent">
+      <input type="checkbox" id="daily-email" role="switch">
+      <span>Send by email</span>
+    </label>
+    <p class="menu-note menu-indent" id="daily-email-note" hidden>Enter an address under Email above to receive them.</p>
     <p class="menu-note" id="daily-note" aria-live="polite"></p>
     <div class="menu-actions" id="daily-actions" hidden>
       <button type="button" class="btn" id="daily-backfill" hidden></button>

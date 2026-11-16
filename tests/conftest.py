@@ -20,6 +20,7 @@ os.environ.update(
         "CREDFILE": str(DATA_DIR / ".blink_creds.json"),
         "VISION_PROVIDER": "ollama",
         "NTFY_URL": "",
+        "SMTP_HOST": "",
         "BLYNKY_URL": "",
         "ALLOWED_HOSTS": "",
         "AUTH_USER": "",
@@ -57,6 +58,9 @@ class FakeMonitor:
         self.queues.remove(queue)
 
     def broadcast_ntfy(self):
+        """Nothing is listening."""
+
+    def broadcast_email(self):
         """Nothing is listening."""
 
 

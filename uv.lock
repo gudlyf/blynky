@@ -270,7 +270,7 @@ requires-dist = [
 
 [[package]]
 name = "blynky"
-version = "0.6.0"
+version = "0.7.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -298,7 +298,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest", specifier = ">=8.4" },
+    { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest-aiohttp", specifier = ">=1.1" },
     { name = "ruff", specifier = ">=0.17.2" },
 ]

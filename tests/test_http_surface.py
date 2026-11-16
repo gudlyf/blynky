@@ -9,14 +9,21 @@ from blynky import config
 @pytest.fixture
 def secrets(data_dir):
     """Files that live in DATA_DIR and must never be served."""
-    names = (".blink_creds.json", "cameras.json", "ntfy.json", "daily.json")
+    names = (
+        ".blink_creds.json",
+        "cameras.json",
+        "ntfy.json",
+        "daily.json",
+        "email.json",
+    )
     for name in names:
         (data_dir / name).write_text("{}")
     return names
 
 
 @pytest.mark.parametrize(
-    "name", [".blink_creds.json", "cameras.json", "ntfy.json", "daily.json", ""]
+    "name",
+    [".blink_creds.json", "cameras.json", "ntfy.json", "daily.json", "email.json", ""],
 )
 async def test_data_dir_files_are_not_served(client, secrets, name):
     response = await client.get(f"/media/{name}")

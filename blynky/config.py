@@ -345,6 +345,19 @@ NTFY_DAILY = os.environ.get("NTFY_DAILY") == "1"
 # Low by default: it lands in the small hours, and is reading, not an alert.
 NTFY_DAILY_PRIORITY = _int("NTFY_DAILY_PRIORITY", 2)
 
+# Send each camera's summary of yesterday by email as it is written, using
+# standard SMTP. The settings menu has a switch for this and the recipient
+# address (SMTP_TO is configured in the UI, not here).
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = _int("SMTP_PORT", 587)
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"
+SMTP_SSL = os.environ.get("SMTP_SSL") == "1"
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
+SMTP_FROM = os.environ.get("SMTP_FROM", "").strip()
+EMAIL_STATE = DATA_DIR / "email.json"
+EMAIL_DAILY = os.environ.get("EMAIL_DAILY") == "1"
+
 # Hour of the day, local time, after which yesterday is summarized. An hour's
 # grace lets the last clips before midnight finish being described first.
 DAILY_HOUR = _int("DAILY_HOUR", 1)
