@@ -345,9 +345,9 @@ NTFY_DAILY = os.environ.get("NTFY_DAILY") == "1"
 # Low by default: it lands in the small hours, and is reading, not an alert.
 NTFY_DAILY_PRIORITY = _int("NTFY_DAILY_PRIORITY", 2)
 
-# Send each camera's summary of yesterday by email as it is written, using
-# standard SMTP. The settings menu has a switch for this and the recipient
-# address (SMTP_TO is configured in the UI, not here).
+# Email yesterday's summaries, all in one message once they are written,
+# using standard SMTP. The settings menu has a switch for this and the
+# recipient address(es), which are set there rather than here.
 SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
 SMTP_PORT = _int("SMTP_PORT", 587)
 SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"

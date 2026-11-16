@@ -168,7 +168,7 @@ def _click(event):
     return f"{config.BLYNKY_URL}/#/event/{quote(event['id'], safe='')}"
 
 
-def _day_click(slug, day):
+def day_link(slug, day):
     """Return the address that opens one camera's day in the library.
 
     A summary of a location or of every camera opens the whole library on
@@ -220,7 +220,7 @@ async def send_daily(session, camera, slug, day, summary, system=None):
         "Tags": "calendar",
         "Priority": str(config.NTFY_DAILY_PRIORITY),
     }
-    click = _day_click(slug, day)
+    click = day_link(slug, day)
     if click:
         headers["Click"] = click
     try:

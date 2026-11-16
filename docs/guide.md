@@ -314,8 +314,11 @@ When they are written:
 - **By email.** With `SMTP_HOST` set, an **Email** field appears in the
   settings menu and a **Send by email** switch under Daily summaries. Enter
   one or more recipient addresses, separated by commas, and turn the switch
-  on: each summary of yesterday is emailed as it is written, one email per
-  summary. As with ntfy, only the nightly summaries are sent, never a
+  on: once yesterday's summaries are written, they arrive together in one
+  email - all cameras first, then each location, then each camera, each
+  with a link to that day in the library when `BLYNKY_URL` is set. Where
+  locations are in different time zones, each zone's night comes in its own
+  email. As with ntfy, only the nightly summaries are sent, never a
   backfill or a **Summarize**, and pausing push notifications pauses these
   too. `EMAIL_DAILY=1` turns the switch on to begin with, but nothing is sent
   until there is an address. To send through Gmail:

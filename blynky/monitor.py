@@ -1392,6 +1392,9 @@ class Monitor:
             name = self.daily.zone_name(slug)
             if name in due and due[name] == day:
                 jobs.append((slug, day))
+        # Emailed together once the night's run is done: one message, not one
+        # per summary.
+        mail = []
         for slug, day in jobs:
             if self._closing or not self.daily.enabled:
                 return
@@ -1409,18 +1412,28 @@ class Monitor:
                             stored["summary"],
                             system=system,
                         )
-                    if self.daily.email and email.recipient():
-                        await email.send_daily(
-                            stored["camera"],
-                            day,
-                            stored["summary"],
-                            system=system,
-                        )
+                    mail.append(
+                        {
+                            "key": slug,
+                            "kind": daily.kind_of(slug),
+                            "camera": stored["camera"],
+                            "day": day,
+                            "summary": stored["summary"],
+                            "system": system,
+                        }
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception as error:  # noqa: BLE001 - never end the poll loop
                 _LOGGER.exception("daily: %s on %s failed: %s", slug, day, error)
             await asyncio.sleep(config.DAILY_PAUSE)
+        if mail and self.daily.email and email.recipient():
+            try:
+                await email.send_digest(mail)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:  # noqa: BLE001 - never end the poll loop
+                _LOGGER.exception("daily: emailing summaries failed: %s", error)
         # Covered even if the model failed: retrying every minute would spend
         # tokens all day, and the day keeps its button for a manual retry.
         self._daily_covered.update(due)

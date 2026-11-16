@@ -126,15 +126,42 @@ async def send(to_address, subject, body):
     return True
 
 
-async def send_daily(camera, day, summary, system=None, to_address=None):
-    """Email one daily summary. Returns True if it was sent.
+# The order summaries come in, in one night's email: the widest first.
+_KIND_ORDER = {"all": 0, "location": 1, "camera": 2}
 
-    Like the ntfy copy, a pause from the settings menu holds for these too.
+
+async def send_digest(entries):
+    """Email one night's summaries together, as one message.
+
+    `entries` are dicts with "key", "kind", "camera", "day", "summary" and
+    "system" (None for every camera). Returns True if it was sent. Like the
+    ntfy copies, a pause from the settings menu holds for these too.
     """
-    if notify.status()["paused"]:
-        _LOGGER.debug("email: notifications paused, not sending %s", camera)
+    if not entries:
         return False
-    label = f"{camera} ({system})" if system else camera
-    subject = f"Blynky daily summary: {label} - {day}"
-    body = f"{label} — {day}\n\n{summary}\n"
-    return await send(to_address, subject, body)
+    if notify.status()["paused"]:
+        _LOGGER.debug("email: notifications paused, not sending the digest")
+        return False
+    entries = sorted(
+        entries,
+        key=lambda e: (_KIND_ORDER.get(e["kind"], 3), e["camera"].lower(), e["day"]),
+    )
+    days = sorted({e["day"] for e in entries})
+    when = days[0] if len(days) == 1 else f"{days[0]} to {days[-1]}"
+    count = len(entries)
+    subject = f"Blynky daily summar{'y' if count == 1 else 'ies'} - {when}"
+    sections = []
+    for entry in entries:
+        system = entry.get("system")
+        label = entry["camera"]
+        if system and system != label:
+            label = f"{label} ({system})"
+        if len(days) > 1:
+            label = f"{label} - {entry['day']}"
+        lines = [label, "-" * len(label), "", entry["summary"].strip()]
+        link = notify.day_link(entry["key"], entry["day"])
+        if link:
+            lines += ["", f"Open in Blynky: {link}"]
+        sections.append("\n".join(lines))
+    body = "\n\n\n".join(sections) + "\n"
+    return await send(None, subject, body)

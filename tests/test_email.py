@@ -48,36 +48,65 @@ async def test_email_configured(monkeypatch):
     assert email.configured()
 
 
-async def test_send_daily_success(smtp):
-    ok = await email.send_daily(
-        "Front Door",
-        "2026-11-15",
-        "Quiet day with two deliveries.",
-        system="Home",
-        to_address="dest@example.com",
+def _entry(key, kind, camera, summary, system=None, day="2026-11-15"):
+    return {
+        "key": key,
+        "kind": kind,
+        "camera": camera,
+        "day": day,
+        "summary": summary,
+        "system": system,
+    }
+
+
+async def test_digest_is_one_email_widest_first(smtp, monkeypatch):
+    monkeypatch.setattr(config, "BLYNKY_URL", "https://blynky.example")
+    await email.set_recipient(["a@example.com", "b@example.com"])
+    ok = await email.send_digest(
+        [
+            _entry("porch", "camera", "Porch", "Two deliveries.", system="Home"),
+            _entry("_location-home", "location", "Home", "Busy.", system="Home"),
+            _entry("_all", "all", "All cameras", "A quiet day overall."),
+        ]
     )
     assert ok is True
     smtp.opener.assert_called_once_with("smtp.gmail.com", 587, timeout=30)
     smtp.starttls.assert_called_once_with()
     smtp.login.assert_called_once_with("sender@gmail.com", "app-password")
-    sent = smtp.send_message.call_args.args[0]
-    assert sent["To"] == "dest@example.com"
-    assert sent["From"] == "sender@gmail.com"
-    assert "Front Door (Home)" in sent["Subject"]
-    assert "Quiet day with two deliveries." in sent.get_content()
-
-
-async def test_send_daily_goes_to_every_saved_recipient(smtp):
-    await email.set_recipient(["a@example.com", "b@example.com"])
-    assert await email.send_daily("Porch", "2026-11-15", "Nothing much.")
+    smtp.send_message.assert_called_once()
     sent = smtp.send_message.call_args.args[0]
     assert sent["To"] == "a@example.com, b@example.com"
+    assert sent["From"] == "sender@gmail.com"
+    assert sent["Subject"] == "Blynky daily summaries - 2026-11-15"
+    body = sent.get_content()
+    assert body.index("All cameras") < body.index("Home") < body.index("Porch (Home)")
+    assert "Home (Home)" not in body
+    assert "camera=porch&until=2026-11-15" in body
+
+
+async def test_digest_over_several_days_says_so(smtp):
+    await email.set_recipient(["dest@example.com"])
+    await email.send_digest(
+        [
+            _entry("porch", "camera", "Porch", "One.", day="2026-11-15"),
+            _entry("yard", "camera", "Yard", "Two.", day="2026-11-14"),
+        ]
+    )
+    sent = smtp.send_message.call_args.args[0]
+    assert sent["Subject"] == "Blynky daily summaries - 2026-11-14 to 2026-11-15"
+    assert "Porch - 2026-11-15" in sent.get_content()
+
+
+async def test_digest_of_nothing_sends_nothing(smtp):
+    await email.set_recipient(["dest@example.com"])
+    assert await email.send_digest([]) is False
+    smtp.send_message.assert_not_called()
 
 
 async def test_pause_holds_for_email_too(smtp):
     await email.set_recipient(["dest@example.com"])
     await notify.pause()
-    assert await email.send_daily("Porch", "2026-11-15", "Nothing much.") is False
+    assert await email.send_digest([_entry("porch", "camera", "Porch", "x")]) is False
     smtp.send_message.assert_not_called()
 
 
