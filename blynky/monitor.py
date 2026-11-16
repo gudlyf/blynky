@@ -21,6 +21,7 @@ from . import (
     cameras,
     config,
     daily,
+    email,
     library,
     media,
     notify,
@@ -206,6 +207,7 @@ class Monitor:
             "cameras": list(self.cameras.values()),
             "events": list(self.events),
             "ntfy": notify.status(),
+            "email": email.status(),
             "daily": self.daily_status(),
             # Where days start and end: the browser splits them here too.
             "time_zone": config.TIME_ZONE,
@@ -214,6 +216,10 @@ class Monitor:
     def broadcast_ntfy(self):
         """Tell every browser that notifications were paused or resumed."""
         self._broadcast({"type": "ntfy", "ntfy": notify.status()})
+
+    def broadcast_email(self):
+        """Tell every browser that the shared email recipient changed."""
+        self._broadcast({"type": "email", "email": email.status()})
 
     # -- connection -------------------------------------------------------
 
@@ -234,6 +240,7 @@ class Monitor:
         await self.people.load()
         await self.names.load()
         await notify.load()
+        email.load()
         await self.daily.load()
         self.start_thumbnails()
         creds = await json_load(config.CREDFILE)
@@ -1257,6 +1264,9 @@ class Monitor:
             # Sending them to ntfy is only offered when there is a topic.
             "ntfy": bool(config.NTFY_URL),
             "notify": self.daily.notify,
+            # Sending them by email is only offered when SMTP is configured.
+            "smtp": email.configured(),
+            "email": self.daily.email,
             "scopes": self.daily.scopes,
             # The location and whole-system summaries there can be, by key.
             "groups": self.daily.groups(),
@@ -1270,7 +1280,13 @@ class Monitor:
     def _broadcast_daily(self, running=None):
         self._broadcast({"type": "daily", "daily": self.daily_status(running)})
 
-    async def set_daily(self, enabled=None, notify=None, scopes=None):
+    async def set_daily(
+        self,
+        enabled=None,
+        notify=None,
+        email=None,
+        scopes=None,
+    ):
         """Change any daily setting. Turning summaries off stops a backfill.
 
         Raises ValueError for a set of scopes with none in it.
@@ -1279,6 +1295,8 @@ class Monitor:
             await self.daily.set_scopes(scopes)
         if notify is not None:
             await self.daily.set_notify(notify)
+        if email is not None:
+            await self.daily.set_email(email)
         if enabled is not None:
             await self.daily.set_enabled(enabled)
             if not enabled:
@@ -1380,15 +1398,24 @@ class Monitor:
             try:
                 written = await self.summarize_day(slug, day)
                 stored = self.daily.entry(slug, day)
-                if written and stored and self.daily.notify:
-                    await notify.send_daily(
-                        self.session,
-                        stored["camera"],
-                        slug,
-                        day,
-                        stored["summary"],
-                        system=self._daily_system(slug, stored),
-                    )
+                if written and stored:
+                    system = self._daily_system(slug, stored)
+                    if self.daily.notify:
+                        await notify.send_daily(
+                            self.session,
+                            stored["camera"],
+                            slug,
+                            day,
+                            stored["summary"],
+                            system=system,
+                        )
+                    if self.daily.email and email.recipient():
+                        await daily.send_email(
+                            stored["camera"],
+                            day,
+                            stored["summary"],
+                            system=system,
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception as error:  # noqa: BLE001 - never end the poll loop

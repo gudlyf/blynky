@@ -13,7 +13,7 @@ from pathlib import Path
 
 from aiohttp import WSMsgType, web
 
-from . import auth, config, daily, guard, library, notify
+from . import auth, config, daily, email, guard, library, notify
 
 _LOGGER = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -354,16 +354,21 @@ async def daily_summaries(request):
     """Change the daily summary settings, and say how the backlog stands.
 
     POST {"enabled": bool} turns summaries on or off, {"notify": bool} sends
-    each night's to ntfy or not, and {"scopes": [...]} picks what gets one -
-    "camera", "location" and "all", at least one; any of them at once. Like
-    the ntfy pause, these are the server's settings, so they hold for everyone.
+    each night's to ntfy or not, {"email": bool} sends each night's by email,
+    and {"scopes": [...]} picks what gets one - "camera", "location" and "all",
+    at least one; any of them at once. Like the ntfy pause, these are the
+    server's settings, so they hold for everyone.
     """
     monitor = request.app["monitor"]
     if request.method == "POST":
         body = await _json_object(request)
-        changes = {key: body[key] for key in ("enabled", "notify") if key in body}
+        changes = {
+            key: body[key] for key in ("enabled", "notify", "email") if key in body
+        }
         if not all(isinstance(v, bool) for v in changes.values()):
-            raise web.HTTPBadRequest(reason="enabled and notify must be true or false")
+            raise web.HTTPBadRequest(
+                reason="enabled, notify and email must be true or false"
+            )
         if "scopes" in body:
             scopes = body["scopes"]
             if (
@@ -486,6 +491,24 @@ async def ntfy(request):
     return web.json_response(notify.status())
 
 
+async def email_settings(request):
+    """Get or set the shared recipient email address."""
+    if request.method == "POST":
+        body = await _json_object(request)
+        if "to" not in body or not isinstance(body["to"], str):
+            raise web.HTTPBadRequest(reason="to must be a string")
+        to_address = body["to"].strip()
+        if to_address:
+            addrs = [a.strip() for a in to_address.split(",") if a.strip()]
+            if not addrs or not all("@" in a for a in addrs):
+                raise web.HTTPBadRequest(reason="to must be email address(es)")
+            to_address = ", ".join(addrs)
+        status = email.set_recipient(to_address)
+        request.app["monitor"].broadcast_email()
+        return web.json_response(status)
+    return web.json_response(email.status())
+
+
 async def websocket(request):
     """Stream state and events to one browser."""
     ws = web.WebSocketResponse(heartbeat=30)
@@ -575,6 +598,8 @@ def create_app(monitor, gate=None):
     app.router.add_post("/api/daily/{slug}/{day}", summarize_day)
     app.router.add_get("/api/ntfy", ntfy)
     app.router.add_post("/api/ntfy", ntfy)
+    app.router.add_get("/api/email", email_settings)
+    app.router.add_post("/api/email", email_settings)
     app.router.add_get("/ws", websocket)
     # Only the folders that hold pictures and clips. DATA_DIR itself also holds
     # the settings files and, under Docker, the Blink credentials, none of

@@ -2598,6 +2598,12 @@ function connect() {
     if (data.type === "ntfy") {
       state.ntfy = data.ntfy;
       renderNtfy();
+      renderEmail();
+      return;
+    }
+    if (data.type === "email") {
+      state.email = data.email;
+      renderEmail();
       return;
     }
 
@@ -2625,7 +2631,9 @@ function connect() {
     if (data.type === "state") {
       let rezoned = setHomeZone(data.time_zone);
       state.ntfy = data.ntfy || null;
+      state.email = data.email || null;
       renderNtfy();
+      renderEmail();
       const zones = JSON.stringify(daily.zones);
       if (data.daily) Object.assign(daily, data.daily);
       if (JSON.stringify(daily.zones) !== zones) rezoned = true;
@@ -3070,6 +3078,13 @@ async function setNtfy(payload) {
   }
 }
 
+function renderEmail() {
+  const info = state.email;
+  el("email-group").hidden = !(info && info.configured);
+  const input = el("email-to");
+  if (document.activeElement !== input) input.value = (info && info.to) || "";
+}
+
 function renderNtfy() {
   const info = state.ntfy;
   clearTimeout(ntfyTimer);
@@ -3098,6 +3113,7 @@ function renderNtfy() {
     ntfyTimer = setTimeout(() => {
       state.ntfy = { ...info, paused: false, until: null };
       renderNtfy();
+      renderEmail();
     }, Math.max(0, left) + 1000);
   }
 }
@@ -3109,6 +3125,27 @@ function setupDaily() {
   box.addEventListener("change", () => setDaily(box, { enabled: box.checked }));
   const send = el("daily-notify");
   send.addEventListener("change", () => setDaily(send, { notify: send.checked }));
+  const sendEmail = el("daily-email");
+  sendEmail.addEventListener("change", () => setDaily(sendEmail, { email: sendEmail.checked }));
+  const emailTo = el("email-to");
+  emailTo.addEventListener("change", async () => {
+    const to = emailTo.value.trim();
+    emailTo.disabled = true;
+    try {
+      const response = await apiFetch("/api/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to }),
+      });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      state.email = await response.json();
+    } catch {
+      showMessage("Could not save email address", "Check the address and try again.");
+    } finally {
+      emailTo.disabled = false;
+      renderEmail();
+    }
+  });
   for (const box of document.querySelectorAll("[data-daily-scope]")) {
     box.addEventListener("change", () => {
       const scopes = [...document.querySelectorAll("[data-daily-scope]")]
@@ -3167,6 +3204,8 @@ function renderDaily() {
     locations < 2 && !daily.scopes.includes("location");
   el("daily-notify-row").hidden = !(daily.enabled && daily.ntfy);
   el("daily-notify").checked = daily.notify;
+  el("daily-email-row").hidden = !(daily.enabled && daily.smtp);
+  el("daily-email").checked = !!daily.email;
   const note = el("daily-note");
   const backfillButton = el("daily-backfill");
   const cancel = el("daily-cancel");

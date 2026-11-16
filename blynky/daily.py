@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 from slugify import slugify
 
-from . import config, library, vision
+from . import config, email, library, vision
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,6 +151,8 @@ class Daily:
         self.enabled = config.DAILY_SUMMARIES
         # Whether the summary written each night is also pushed to ntfy.
         self.notify = config.NTFY_DAILY
+        # Whether the summary written each night is also sent by email.
+        self.email = config.EMAIL_DAILY
         # Which kinds of summary are written, from SCOPES.
         self.scopes = list(config.DAILY_SCOPES)
         # {location key's slug: zone} for each location whose days are not
@@ -174,6 +176,7 @@ class Daily:
             stored = json.loads(text)
             self.enabled = bool(stored.get("enabled"))
             self.notify = bool(stored.get("notify", self.notify))
+            self.email = bool(stored.get("email", self.email))
             scopes = [s for s in SCOPES if s in (stored.get("scopes") or [])]
             if scopes:
                 self.scopes = scopes
@@ -215,6 +218,12 @@ class Daily:
         await self._save()
         _LOGGER.info("daily summaries to ntfy %s", "on" if self.notify else "off")
 
+    async def set_email(self, email):
+        """Turn sending each night's summaries by email on or off."""
+        self.email = bool(email)
+        await self._save()
+        _LOGGER.info("daily summaries by email %s", "on" if self.email else "off")
+
     async def set_scopes(self, scopes):
         """Choose which kinds of summary are written. Needs at least one."""
         chosen = [scope for scope in SCOPES if scope in scopes]
@@ -226,7 +235,12 @@ class Daily:
 
     async def _save(self):
         payload = json.dumps(
-            {"enabled": self.enabled, "notify": self.notify, "scopes": self.scopes}
+            {
+                "enabled": self.enabled,
+                "notify": self.notify,
+                "email": self.email,
+                "scopes": self.scopes,
+            }
         )
         try:
             await asyncio.to_thread(_write_atomic, config.DAILY_STATE, payload)
@@ -539,3 +553,14 @@ class Daily:
 def yesterday(where=None):
     """Return yesterday's date as YYYY-MM-DD, in a zone, the server's by default."""
     return (today(where) - timedelta(days=1)).isoformat()
+
+
+async def send_email(camera, day, summary, system=None, to_address=None):
+    """Format and send one daily summary by email. Returns True if sent."""
+    subject = (
+        f"Blynky daily summary: {camera} ({system}) - {day}"
+        if system
+        else f"Blynky daily summary: {camera} - {day}"
+    )
+    body = f"{camera}" + (f" ({system})" if system else "") + f" — {day}\n\n{summary}\n"
+    return await email.send(to_address or email.recipient(), subject, body)

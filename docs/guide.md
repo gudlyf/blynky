@@ -309,7 +309,22 @@ When they are written:
   location or "All cameras" and the day. Tapping it opens that day in the
   library - narrowed to the camera, for a camera's - when `BLYNKY_URL` is
   set. They arrive in the small hours, so they go at low priority (`NTFY_DAILY_PRIORITY`, default `2`), which ntfy delivers without a
-  sound. Only the nightly summaries are sent. A backfill or a **Summarize**
+  sound. Only the nightly summaries are sent. - **By email.** With `SMTP_HOST` configured, an **Email** field and a **Send by email** switch appear in the settings menu. Enter one or more comma-separated recipient addresses, and each night's summaries will be emailed as they are written (backfills are never emailed).
+  To use Gmail:
+  1. Enable **2-Step Verification** on your Google Account if it is not already on.
+  2. Go to your Google Account **Security** settings (or visit `https://myaccount.google.com/apppasswords`).
+  3. Create a new **App password** (for example, named `Blynky`). Google will generate a 16-character password.
+  4. Set these environment variables in `.env`:
+     ```env
+     SMTP_HOST=smtp.gmail.com
+     SMTP_PORT=587
+     SMTP_STARTTLS=1
+     SMTP_USER=you@gmail.com
+     SMTP_PASSWORD=xxxx xxxx xxxx xxxx
+     ```
+  5. Restart Blynky, open the settings menu, enter the recipient email address(es) under **Email**, enable **Daily summaries**, and turn on **Send by email**.
+
+A backfill or a **Summarize**
   button never sends one, and pausing push notifications pauses these too.
 - **In the library.** With the library narrowed to one camera, each past day
   opens with that camera's summary under the day's heading, or a

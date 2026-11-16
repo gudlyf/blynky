@@ -196,6 +196,14 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `NTFY_SKIP_KNOWN` | `0` | `1` sends nothing when everyone seen is recognised |
 | `NTFY_DAILY` | unset | `1` pushes each night's daily summaries to ntfy. The **Send to ntfy** switch in the settings menu overrides this once used |
 | `NTFY_DAILY_PRIORITY` | `2` | ntfy priority for those summaries. Low, so they arrive without a sound |
+| `SMTP_HOST` | unset | SMTP server hostname (e.g. `smtp.gmail.com`) for emailing daily summaries |
+| `SMTP_PORT` | `587` | SMTP server port (`587` for STARTTLS, `465` for SSL) |
+| `SMTP_STARTTLS` | `1` | `1` upgrades the connection with STARTTLS |
+| `SMTP_SSL` | `0` | `1` connects over implicit SSL (typically port `465`) |
+| `SMTP_USER` | unset | SMTP username (e.g. your full Gmail address) |
+| `SMTP_PASSWORD` | unset | SMTP password or Gmail App Password |
+| `SMTP_FROM` | `SMTP_USER` | Sender address (`From` header); defaults to `SMTP_USER` |
+| `EMAIL_DAILY` | unset | `1` turns on emailing each night's daily summaries. The **Send by email** switch and **Email** recipient address in the settings menu override this. See the [guide](docs/guide.md#daily-summaries) for Gmail setup |
 
 </details>
 
