@@ -71,8 +71,8 @@ without the blinkpy checkout beside the repo.
 
 - **Don't break existing archives.** People have months of captures in
   `DATA_DIR`. The sidecar JSON, the folder layout, `cameras.json`, the daily
-  summaries under `daily/` and the settings in `ntfy.json` and `daily.json`
-  must keep reading what older versions wrote.
+  summaries under `daily/` and the settings in `ntfy.json`, `daily.json` and
+  `email.json` must keep reading what older versions wrote.
 - **Go easy on Blink.** Don't poll more often than once a minute, and don't
   wake battery cameras unless the user asked for it.
 - **blinkpy changes go on the fork's `blynky` branch.** If a fix belongs in

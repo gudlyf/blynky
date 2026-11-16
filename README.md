@@ -34,7 +34,7 @@ It runs on your own machine, and the descriptions come from a model on your own 
 - **Motion clips with descriptions.** Blynky samples frames from each clip and has a vision model describe them. Each description also lists what it found (`person`, `animal`, `vehicle` or `package`), and that list drives the filters and alerts. Captures are tagged too: `#person`, `#vehicle`, `#night`, a few finer tags like `#dog` or `#delivery`, and the names of people it recognises (or `#unknown` when it doesn't).
 - **A full library.** Every clip and still is saved, grouped by day and searchable by text or `#tag`. You can filter by camera or by what was seen, and jump to any date. Star the captures worth keeping, and show only those with one click.
 - **Phone alerts through [ntfy](https://ntfy.sh).** An alert carries the description and a frame from the clip, and tapping it can open that capture in Blynky. You choose which subjects trigger one, there's a cooldown for each camera, and you can pause alerts from the UI.
-- **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions and writes a two- or three-sentence summary of it: for each camera, for each location (Blink system), for all cameras together, or any mix of those. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy each night. Past days can be summarized one at a time or all at once, with a warning about token use first.
+- **Daily summaries (optional).** Once a day is over, the model reads that day's descriptions and writes a two- or three-sentence summary of it: for each camera, for each location (Blink system), for all cameras together, or any mix of those. Summaries appear on each camera's page and at the top of each day in the library, and can be pushed to ntfy or emailed each night, the email being one message with all of the night's summaries in it. Past days can be summarized one at a time or all at once, with a warning about token use first.
 - **Known people (optional).** Tag a person in a few captures and the model will guess who later visitors are ("Looks like Alex"). Recognised people can get quieter alerts, or none at all.
 - **Catches what polling misses.** **Sync now** pulls recent clips from the cloud and from the sync modules' storage, including clips recorded while Blynky wasn't running.
 - **Copes with Blink changes.** Cameras renamed, re-added or moved between systems are picked up without a restart, and their history stays with them.
@@ -51,6 +51,7 @@ flowchart LR
     M -- clips, stills, sidecars --> D[(./data)]
     M -- WebSocket --> UI[Browser UI]
     M -. person seen,<br>daily summary .-> N[ntfy → phone]
+    M -. nightly summaries,<br>one email .-> E[SMTP → inbox]
 ```
 
 Blink has no push API, so Blynky polls, no more often than once a minute so it doesn't overload Blink's servers. Expect motion to show up tens of seconds after it happens, because the clip has to finish uploading to Blink first.
@@ -108,6 +109,7 @@ Keep these in mind too:
 
 - **The credentials file.** `.blink_creds.json` holds your Blink password in plain text next to the tokens, because blinkpy stores it that way. Blynky makes it readable only by you (`chmod 600`), and `.gitignore` and `.dockerignore` both exclude it.
 - **ntfy topics are public.** Anyone who knows the name of an ntfy.sh topic can read it, and these alerts say who is at your door and when. With **Send to ntfy** on, so does a summary of each camera's day. Use a long, random topic name or a self-hosted ntfy server.
+- **Emailed summaries.** With **Send by email** on, each night's summaries go to every address under **Email**, through your mail provider, and with `BLYNKY_URL` set they carry its address too. `SMTP_PASSWORD` sits in `.env` in plain text: use an app password, such as Gmail's, rather than your account password, so it can be revoked on its own.
 - **The names it answers to.** Blynky only answers requests addressed to an IP address, `localhost`, the host in `BLYNKY_URL`, or a name listed in `ALLOWED_HOSTS`. Anything else gets an error that names the setting to change. This stops a web page you visit from reaching Blynky through a DNS name it controls. If you open Blynky by a name such as `nas.local`, or by a `tailscale serve` name that isn't your `BLYNKY_URL`, add it to `ALLOWED_HOSTS`.
 - **Other sites can't use your browser against it.** Anything that changes a setting, and the live connection, is refused when the browser says it comes from another site, and request bodies must be JSON.
 - **Notification links (`BLYNKY_URL`).** Setting `BLYNKY_URL` makes a notification open the capture when tapped. Use an address only your own devices can reach, such as your `tailscale serve` name or a LAN address, and never one open to the internet, even with `AUTH_USER` set. It only works where your phone can reach that address, so a LAN address won't open while you're away. The address is also sent inside every notification, so anyone who can read the topic sees it.
@@ -203,7 +205,7 @@ Every setting is an environment variable, and all of them are optional. Put them
 | `SMTP_USER` | unset | SMTP username (e.g. your full Gmail address) |
 | `SMTP_PASSWORD` | unset | SMTP password or Gmail App Password |
 | `SMTP_FROM` | `SMTP_USER` | Sender address (`From` header); defaults to `SMTP_USER` |
-| `EMAIL_DAILY` | unset | `1` starts with emailing each night's daily summaries switched on. Nothing is sent until a recipient is entered under **Email** in the settings menu, and the **Send by email** switch there overrides this once used. See the [guide](docs/guide.md#daily-summaries) for Gmail setup |
+| `EMAIL_DAILY` | unset | `1` starts with emailing each night's daily summaries switched on, all of them in one email. Nothing is sent until a recipient is entered under **Email** in the settings menu, and the **Send by email** switch there overrides this once used. See the [guide](docs/guide.md#daily-summaries) for Gmail setup |
 
 </details>
 
@@ -240,7 +242,7 @@ data/
   daily/<camera>/<YYYY-MM-DD>.json        one camera's summary of one day
   daily/_location-<system>/, daily/_all/  the same for a location, or every camera
   cameras.json                            every name each camera has had
-  ntfy.json, daily.json                   settings changed from the settings menu
+  ntfy.json, daily.json, email.json       settings changed from the settings menu
   .session_secret                         signs login sessions, when AUTH_USER is set
 ```
 
