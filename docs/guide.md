@@ -360,7 +360,8 @@ Summaries are kept in `data/daily/<camera>/<date>.json`, with a location's
 under `data/daily/_location-<system>/` and the whole day's under
 `data/daily/_all/`. Retention never removes them, so a day's summary is still
 there after its footage has been pruned. The settings are kept in
-`data/daily.json`, so a restart remembers them.
+`data/daily.json`, and the email recipients in `data/email.json`, so a
+restart remembers them.
 
 A day runs midnight to midnight **in the server's time zone**. A container runs
 on UTC unless told otherwise, which ends each "day" in the evening for anyone
