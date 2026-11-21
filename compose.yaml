@@ -89,7 +89,7 @@ services:
   ntfy:
     # Pinned by digest too, so the tag cannot be moved under it; Dependabot
     # proposes updates.
-    image: binwiederhier/ntfy:v2.37.2@sha256:1875ddcf815c8a3c981d6d78c67a93452d0abba79b1ab9520b1f5f5238902bd7
+    image: binwiederhier/ntfy:v2.38.1@sha256:038da2be5e668fee6d36a62884eea48975e1b71c29a56964e5298c1b9165a573
     profiles: [ntfy]
     command: serve
     restart: unless-stopped
