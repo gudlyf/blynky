@@ -60,7 +60,7 @@ services:
     # Nothing prunes this. The library keeps every clip and still ever
     # captured, so expect the host directory to grow without bound.
     volumes:
-      - ./data:/data
+      - ${HOST_DATA_DIR:-./data}:/data
 
     # Nothing in the image needs to change at runtime: everything Blynky
     # writes goes to /data, and ffmpeg's frames to /tmp. So the root
